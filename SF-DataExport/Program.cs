@@ -1,5 +1,4 @@
 ﻿using Microsoft.Extensions.CommandLineUtils;
-using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
@@ -14,9 +13,7 @@ namespace SF_DataExport
     {
         static void Main(string[] args)
         {
-            var config = new ConfigurationBuilder()
-                .AddJsonFile("appsettings.json", true, true)
-                .Build();
+            var appSettings = new JsonConfig(Path.Combine(AppContext.BaseDirectory, "appsettings.json"));
 
             var cliApp = new CommandLineApplication(false);
 
@@ -26,20 +23,50 @@ namespace SF_DataExport
                 var channelOpt = cliApp.Option("-c", "Preferred Chrome Channel", CommandOptionType.SingleValue);
                 cliCfg.OnExecute(async () =>
                 {
-                    return await DownloadDataExportAsync(await GetChromePath(pathOpt.Value(), channelOpt.Value(), config));
+                    var chromePathInConfig= appSettings.Get(o => o["chromePath"]?.ToString());
+                    var chromePath = GetChromePath(pathOpt.Value(), channelOpt.Value(), chromePathInConfig);
+                    if (!string.IsNullOrEmpty(pathOpt.Value()) && chromePathInConfig != chromePath)
+                    {
+                        await appSettings.SaveAysnc(cfg => cfg["chromePath"] = chromePath);
+                    }
+                    return await DownloadDataExportAsync(chromePath);
                 });
             });
 
             {
                 var pathOpt = cliApp.Option("-p", "Chrome executable path", CommandOptionType.SingleValue);
                 var channelOpt = cliApp.Option("-c", "Preferred Chrome Channel", CommandOptionType.SingleValue);
-                var orgPathOpt = cliApp.Option("-o", "organization.json path", CommandOptionType.SingleValue);
+                var orgPathOpt = cliApp.Option("-o", "orgsettings.json path", CommandOptionType.SingleValue);
+
                 cliApp.OnExecute(async () =>
                 {
                     cliApp.ShowHelp();
-                    return await StartAsync(
-                        await GetChromePath(pathOpt.Value(), channelOpt.Value(), config),
-                        orgPathOpt.Value() ?? AppContext.BaseDirectory);
+                    
+                    var chromePathInConfig= appSettings.Get(o => o["chromePath"]?.ToString()) ?? "";
+                    var chromePath = GetChromePath(pathOpt.Value(), channelOpt.Value(), chromePathInConfig);
+                    if (!string.IsNullOrEmpty(pathOpt.Value()) && chromePathInConfig != chromePath)
+                    {
+                        await appSettings.SaveAysnc(cfg => cfg["chromePath"] = chromePath);
+                    }
+
+                    var orgPathInConfig = appSettings.Get(o => o["orgSettingsPath"]?.ToString()) ?? "";
+                    var orgPath = Path.Combine(
+                        (orgPathOpt.Value() != "" ? orgPathOpt.Value() : null)
+                        ?? (orgPathInConfig != "" ? orgPathInConfig : null)
+                        ?? AppContext.BaseDirectory,
+                        "orgsettings.json");
+                    var orgSettings = new JsonConfig(orgPath);
+
+                    var orgPathSave = orgPath != Path.Combine(AppContext.BaseDirectory, "orgsettings.json") ? orgPath : "";
+                    if (orgPathSave != orgPathInConfig) await appSettings.SaveAysnc(o => o["orgSettingsPath"] = orgPathSave);
+
+
+                    if (!string.IsNullOrEmpty(pathOpt.Value()) && chromePathInConfig != chromePath)
+                    {
+                        await appSettings.SaveAysnc(cfg => cfg["orgSettingsPath"] = chromePath);
+                    }
+                    
+                    return await StartAsync(chromePath, appSettings, orgSettings);
                 });
             }
 
@@ -58,7 +85,7 @@ namespace SF_DataExport
         //    return 0;
         //}
 
-        static async Task<string> GetChromePath(string pathOpt, string channelOpt, IConfigurationRoot config)
+        static string GetChromePath(string pathOpt, string channelOpt, string chromePathInConfig)
         {
             var finder = new ChromeFinder();
 
@@ -70,10 +97,10 @@ namespace SF_DataExport
                 }
                 throw new Exception("Cannot access chrome " + pathOpt);
             }
-
-            if (finder.CanAccess(config["chromePath"]))
+            
+            if (finder.CanAccess(chromePathInConfig))
             {
-                return config["chromePath"];
+                return chromePathInConfig;
             }
 
             var (chromePath, type) = new ChromeFinder().Find(channelOpt);
@@ -82,30 +109,7 @@ namespace SF_DataExport
                 return null;
             }
 
-            if (config["chromePath"] != chromePath)
-            {
-                await WriteJsonAsync(cfg => cfg["chromePath"] = chromePath);
-            }
             return chromePath;
-        }
-
-        static async Task WriteJsonAsync(Action<JObject> setter)
-        {
-            var configPath = Path.Combine(AppContext.BaseDirectory, "appsettings.json");
-            var configJson = new JObject();
-            try
-            {
-                using (var stream = new FileStream(configPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-                {
-                    using (var reader = new StreamReader(stream))
-                    {
-                        configJson = JsonConvert.DeserializeObject<JObject>(await reader.ReadToEndAsync());
-                    }
-                }
-            }
-            catch { }
-            setter(configJson);
-            await File.WriteAllTextAsync(configPath, configJson.ToString());
         }
 
         static async Task<int> DownloadDataExportAsync(string chromePath)
@@ -113,15 +117,15 @@ namespace SF_DataExport
             return 0;
         }
 
-        static async Task<int> StartAsync(string chromePath, string orgPath)
+        static async Task<int> StartAsync(string chromePath, JsonConfig appSettings, JsonConfig orgSettings)
         {
             if (string.IsNullOrEmpty(chromePath))
             {
                 new ResourceHelper().OpenBrowser("https://www.google.com/chrome");
                 throw new Exception("Cannot find chromium installation path, please specific the path using the -p <path> option.");
             }
-
-            var appDialog = new AppDialog(orgPath);
+            
+            var appDialog = new AppDialog(appSettings, orgSettings);
             await appDialog.DisplayAsync(chromePath);
             return 0;
         }

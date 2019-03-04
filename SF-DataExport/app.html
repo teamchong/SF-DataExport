@@ -312,10 +312,10 @@
                     <h2 id="modal-heading-01" class="slds-text-heading_medium slds-hyphenate">Manage Connections</h2>
                 </header>
                 <div class="slds-modal__content slds-p-around_medium" id="modal-content-id-1">
-                    <div v-if="organizations.length">
+                    <div v-if="orgSettings.length">
                         <blockquote>Saved Organizations</blockquote>
                         <ul>
-                            <li style="margin:2em;" v-for="organizations">
+                            <li style="margin:2em;" v-for="orgSettings">
                                 <div class="slds-box">
                                     <button class="slds-button slds-button_neutral" style="width:100%;padding:2em;font-size:200%;text-align:left">
                                         {{name}}
@@ -395,12 +395,8 @@
             return { customLoginUrlInput: '', customLoginUrl: '' }
         },
         computed: {
-            organization() {
-                return this.$store.state.organization;
-            },
-            organizations() {
-                return this.$store.state.organizations;
-            },
+            orgSettings() { return getState('orgSettings'); },
+            organization() { return getState('organization'); },
             customLoginUrlHint() {
                 return this.customLoginUrl ? this.customLoginUrl : '*.my.salesforce.com';
             }
@@ -418,8 +414,8 @@
         store,
         computed: {
             appPage() { return store.state.appPage; },
-            organizations() { return store.state.organizations; },
-            organization() { return store.state.organizations; },
+            orgSettings() { return getState('orgSettings'); },
+            organization() { return getState('organization'); },
             salesforceLogoUri() { return store.state.salesforceLogoUri; },
             isLoading() { return store.state.isLoading; },
         },

@@ -17,12 +17,14 @@ namespace SF_DataExport
         string SfLogoUri { get; set; }
 
         ResourceHelper Resource { get; set; }
-        OrgConnections Organizations { get; set; }
+        JsonConfig AppSettings { get; set; }
+        JsonConfig OrgSettings { get; set; }
 
-        public AppDialog(string orgPath)
+        public AppDialog(JsonConfig appSettings, JsonConfig orgSettings)
         {
             Resource = new ResourceHelper();
-            Organizations = new OrgConnections(orgPath);
+            AppSettings = appSettings;
+            OrgSettings = orgSettings;
             SfLogoUri = "data:image/x-icon;base64," + Convert.ToBase64String(Resource.GetResourceBytes("favicon.ico"));
         }
 
@@ -30,13 +32,16 @@ namespace SF_DataExport
         {
             var appState = new JObject
             {
-                ["appPage"] = "index",
-                ["organizations"] = new JArray(Organizations.List()),
+                ["orgSettings"] = new JArray(OrgSettings.List()),
                 ["organization"] = null,
-                ["showOrganization"] = false,
-                ["isLoading"] = false,
-                ["attemptingDomain"] = "",
-                ["salesforceLogoUri"] = SfLogoUri,
+                ["_"] = new JObject
+                {
+                    ["appPage"] = "index",
+                    ["showOrganization"] = false,
+                    ["isLoading"] = false,
+                    ["attemptingDomain"] = "",
+                    ["salesforceLogoUri"] = SfLogoUri,
+                },
             };
             return appState;
         }
@@ -69,6 +74,10 @@ namespace SF_DataExport
                 page.SetRequestInterceptionAsync(interception),
                 page.SetCacheEnabledAsync(false),
                 page.SetBypassCSPAsync(true),
+                page.ExposeFunctionAsync("getState", (string name) =>
+                {
+                    return appState[name];
+                }),
                 page.ExposeFunctionAsync("subscribeAction", (JObject action, JObject state) =>
                 {
                     return SubscribeAction(action, state, page, appState);
@@ -76,7 +85,7 @@ namespace SF_DataExport
                 page.ExposeFunctionAsync("subscribeMutation", (JObject mutation, JObject state) =>
                 {
                     var commits = SubscribeMutation(mutation, state, page, appState);
-                    appState = state;
+                    appState["_"] = state;
                     return commits;
                 }),
                 Task.Run(() =>
@@ -107,7 +116,7 @@ namespace SF_DataExport
 <script>", Resource.GetResource("rxjs.js"), @"</script>
 </head>
 <body>
-", Resource.GetResource("app.html").Replace("\"<<appState>>\"", JsonConvert.SerializeObject(appState)), @"
+", Resource.GetResource("app.html").Replace("\"<<appState>>\"", JsonConvert.SerializeObject(appState["_"])), @"
 </body>
 </html>");
         }
@@ -151,7 +160,7 @@ namespace SF_DataExport
                     }
                     else
                     {
-                        appState["isLoading"] = false;
+                        appState["_"]["isLoading"] = false;
                         PageInterception(() => request.RespondAsync(new ResponseData
                         {
                             Status = System.Net.HttpStatusCode.Created,
@@ -224,16 +233,16 @@ namespace SF_DataExport
                             {
                                 loginSetting[key] = tokens[key];
                             }
-                            loginSetting["login_url"] = appState["attemptingDomain"];
+                            loginSetting["login_url"] = appState["_"]["attemptingDomain"];
 
                             if (new[] { "access_token", "instance_url" }.All(s => !string.IsNullOrEmpty(loginSetting[s]?.ToString())))
                             {
-                                await Organizations.SaveAysnc(json =>
+                                await OrgSettings.SaveAysnc(json =>
                                 {
-                                    json[loginSetting["instance_url"]] = loginSetting;
-                                    appState["organizations"] = new JArray(json.Properties().Select(p => p.Name));
+                                    json[loginSetting["instance_url"].ToString()] = loginSetting;
+                                    appState["orgSettings"] = new JArray(json.Properties().Select(p => p.Name));
                                     appState["organization"] = loginSetting["instance_url"];
-                                    appState["showOrganization"] = false;
+                                    appState["_"]["showOrganization"] = false;
                                 });
                             }
                             else if (new[] { "error", "error_description" }.All(s => !string.IsNullOrEmpty(loginSetting[s]?.ToString())))
@@ -245,7 +254,7 @@ namespace SF_DataExport
                                 Console.WriteLine($"Login fail (Unknown)\n${loginSetting}");
                             }
                         }
-                        appState["attemptingDomain"] = "";
+                        appState["_"]["attemptingDomain"] = "";
                     })
                     .Catch((Exception ex) => Observable.Timer(TimeSpan.FromSeconds(1)).SelectMany(_ => Observable.Throw<System.Reactive.Unit>(ex)))
                     .Retry(3)
@@ -280,8 +289,8 @@ namespace SF_DataExport
                             Observable.FromAsync(() => page.SetRequestInterceptionAsync(false)),
                             Observable.FromAsync(() => page.GoToAsync(url)).Cast<System.Reactive.Unit>()
                         ).SubscribeOn(TaskPoolScheduler.Default).Subscribe();
-                        appState["isLoading"] = true;
-                        appState["attemptingDomain"] = attemptingDomain;
+                        appState["_"]["isLoading"] = true;
+                        appState["_"]["attemptingDomain"] = attemptingDomain;
                     }
                     break;
             }
@@ -301,6 +310,8 @@ namespace SF_DataExport
             launchOpts.Args = new string[] { string.Join(" ", new [] {
                 $"--force-app-mode",
                 $"--disable-extensions",
+                $"--enable-experimental-accessibility-features",
+                $"--no-sandbox",
                 $"--disable-web-security",
                 $"--user-agent=\"SF-DataExport\"",
                 $"--enable-features=NetworkService",

@@ -8,35 +8,34 @@ using System.Threading.Tasks;
 
 namespace SF_DataExport
 {
-    public class OrgConnections
+    public class JsonConfig
     {
         string JsonPath { get; set; }
 
-        public OrgConnections(string jsonPath)
+        public JsonConfig(string jsonPath)
         {
-            JsonPath = Path.Combine(jsonPath, "organization.json");
+            JsonPath = jsonPath;
         }
 
-        public void ChangePath(string jsonPath)
-        {
-            JsonPath = Path.Combine(jsonPath, "organization.json");
-        }
+        public string GetPath() => JsonPath;
+
+        public void SetPath(string jsonPath) => JsonPath = jsonPath;
 
         public JObject Read()
         {
-            var organizations = new JObject();
+            var json = new JObject();
             try
             {
                 using (var stream = new FileStream(JsonPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
                 {
                     using (var reader = new StreamReader(stream))
                     {
-                        organizations = JsonConvert.DeserializeObject<JObject>(reader.ReadToEnd());
+                        json = JsonConvert.DeserializeObject<JObject>(reader.ReadToEnd());
                     }
                 }
             }
             catch { }
-            return organizations;
+            return json;
         }
 
         public string[] List()
