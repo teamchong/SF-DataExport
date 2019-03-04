@@ -1,7 +1,10 @@
-﻿using Newtonsoft.Json;
+﻿using DotNetForce;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using PuppeteerSharp;
 using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reactive.Concurrency;
@@ -20,28 +23,87 @@ namespace SF_DataExport
         JsonConfig AppSettings { get; set; }
         JsonConfig OrgSettings { get; set; }
 
+
+        ConcurrentDictionary<string, DateTime> PostingUrls { get; set; }
+
         public AppDialog(JsonConfig appSettings, JsonConfig orgSettings)
         {
             Resource = new ResourceHelper();
             AppSettings = appSettings;
             OrgSettings = orgSettings;
             SfLogoUri = "data:image/x-icon;base64," + Convert.ToBase64String(Resource.GetResourceBytes("favicon.ico"));
+            PostingUrls = new ConcurrentDictionary<string, DateTime>();
+        }
+
+        public string GetClientId(string loginUrl)
+        {
+            if (loginUrl.Contains("login.salesforce.com"))
+                return OAuth.CLIENT_ID;
+            else
+                return OAuth.CLIENT_ID_SANDBOX;
+        }
+
+        public string GetRedirectUrl(string loginUrl)
+        {
+            if (loginUrl.Contains("login.salesforce.com"))
+                return OAuth.REDIRECT_URI;
+            else
+                return OAuth.REDIRECT_URI_SANDBOX;
+        }
+
+        public Task<JToken> Alert(string message, Page page)
+        {
+            return page.EvaluateExpressionAsync("alert(" + JsonConvert.SerializeObject(message ?? "") + ")");
+        }
+
+        public Task<JToken> Confirm(string message, Page page)
+        {
+            return page.EvaluateExpressionAsync("confirm(" + JsonConvert.SerializeObject(message ?? "") + ")");
+        }
+
+        public Task<JToken> Prompt(string message, string defaultValue, Page page)
+        {
+            return page.EvaluateExpressionAsync("prompt(" + JsonConvert.SerializeObject(message ?? "") +
+                "," + JsonConvert.SerializeObject(defaultValue ?? "") + ")");
+        }
+
+        public Task<JToken> CommitAsync(JObject changes, Page page)
+        {
+            if (changes != null)
+            {
+                try
+                {
+                    var changeList = new List<string>();
+                    foreach (var c in changes.Properties().Select(p => p.Name))
+                    {
+                        changeList.Add(@"store.commit('commit'," + JsonConvert.SerializeObject(new JObject
+                        {
+                            ["name"] = c,
+                            ["value"] = changes[c]
+                        }) + ")");
+                    }
+                    return page.EvaluateExpressionAsync("try{if(typeof store!=='undefined'){" + string.Join(";", changeList) + "}}catch(_ex){}");
+                }
+                catch { }
+            }
+            return Task.FromResult<JToken>(null);
         }
 
         public JObject GetInitialAppState()
         {
             var appState = new JObject
             {
+                ["appPage"] = "index",
+                ["attemptingDomain"] = "",
+                ["attemptLoginResult"] = null,
+                ["currentInstanceUrl"] = "",
+                ["isLoading"] = false,
+                ["orgOfflineAccess"] = new JArray(OrgSettings.List()
+                    .Where(org => !string.IsNullOrEmpty(OrgSettings.Get(o => o[org]?[OAuth.REFRESH_TOKEN]?.ToString())))),
+                ["orgOpened"] = false,
                 ["orgSettings"] = new JArray(OrgSettings.List()),
-                ["organization"] = null,
-                ["_"] = new JObject
-                {
-                    ["appPage"] = "index",
-                    ["showOrganization"] = false,
-                    ["isLoading"] = false,
-                    ["attemptingDomain"] = "",
-                    ["salesforceLogoUri"] = SfLogoUri,
-                },
+                ["orgSettingsPath"] = OrgSettings.GetPath(),
+                ["salesforceLogoUri"] = SfLogoUri,
             };
             return appState;
         }
@@ -85,7 +147,10 @@ namespace SF_DataExport
                 page.ExposeFunctionAsync("subscribeMutation", (JObject mutation, JObject state) =>
                 {
                     var commits = SubscribeMutation(mutation, state, page, appState);
-                    appState["_"] = state;
+                    foreach (var name in state.Properties().Select(s => s.Name))
+                    {
+                        appState[name] = state[name];
+                    }
                     return commits;
                 }),
                 Task.Run(() =>
@@ -95,7 +160,7 @@ namespace SF_DataExport
                     //page.Console += Page_Console;
                     //page.Response += (object sender, ResponseCreatedEventArgs e) => Page_Response(e.Response, page, appState);
                     page.Request += (object sender, RequestEventArgs e) => Page_Request(e.Request, page, appState);
-                    //page.RequestFinished += (object sender, RequestEventArgs e) => Page_RequestFinished(e.Request, page, appState);
+                    page.RequestFinished += (object sender, RequestEventArgs e) => Page_RequestFinished(e.Request, page, appState);
                     page.RequestFailed += (object sender, RequestEventArgs e) => Page_RequestFailed(e.Request, page, appState);
                     page.DOMContentLoaded += (object sender, EventArgs e) => Page_DOMContentLoaded(page, appState);
                 })
@@ -116,7 +181,7 @@ namespace SF_DataExport
 <script>", Resource.GetResource("rxjs.js"), @"</script>
 </head>
 <body>
-", Resource.GetResource("app.html").Replace("\"<<appState>>\"", JsonConvert.SerializeObject(appState["_"])), @"
+", Resource.GetResource("app.html").Replace("\"<<appState>>\"", JsonConvert.SerializeObject(appState)), @"
 </body>
 </html>");
         }
@@ -138,6 +203,7 @@ namespace SF_DataExport
 
         void Page_Response(Response response, Page page, JObject appState)
         {
+            page.SetRequestInterceptionAsync(true);
             Console.WriteLine("Response: " + response.Url);
         }
 
@@ -145,48 +211,48 @@ namespace SF_DataExport
         {
             switch (request.Url)
             {
-                case var url when IsAuthorizationPage(url):
-                    page.SetRequestInterceptionAsync(true);
-                    page.SetJavaScriptEnabledAsync(false);
-                    break;
-
                 case OAuth.REDIRECT_URI:
-                case var url when url == OAuth.REDIRECT_URI + '/':
-                    page.SetRequestInterceptionAsync(true); // safe guard
-
-                    if (IsAuthorizationPage(page.Url))
+                case OAuth.REDIRECT_URI_SANDBOX:
+                    page.SetRequestInterceptionAsync(true);
+                    appState["isLoading"] = true;
+                    PageInterception(() => request.RespondAsync(new ResponseData
                     {
-                        PageInterception(() => request.AbortAsync(), page);
-                    }
-                    else
-                    {
-                        appState["_"]["isLoading"] = false;
-                        PageInterception(() => request.RespondAsync(new ResponseData
-                        {
-                            Status = System.Net.HttpStatusCode.Created,
-                            ContentType = "text/html",
-                            Body = GetPageContent(appState, datauri: false)
-                        }), page);
-                    }
+                        Status = System.Net.HttpStatusCode.Created,
+                        ContentType = "text/html",
+                        Body = GetPageContent(appState, datauri: false)
+                    }), page);
                     break;
-                case var url when url.StartsWith(OAuth.REDIRECT_URI + "/assets/"):
-                    var resPath = request.Url.Substring((OAuth.REDIRECT_URI + "/assets/").Length);
-                    var res = Resource.GetResourceBytes(resPath);
-                    if (res == null)
-                        PageInterception(() => request.AbortAsync(), page);
+                case var url when (url.StartsWith("https://login.salesforce.com/") || url.StartsWith("https://test.salesforce.com/")) && url.Contains(".salesforce.com/assets/icons/"):
+                    var icoPath = "icons/" + request.Url.Split(".salesforce.com/assets/icons/", 2).Last();
+                    var ico = Resource.GetResourceBytes(icoPath);
+                    if (ico == null)
+                        PageInterception(() => request.ContinueAsync(), page);
                     else
                         PageInterception(() => request.RespondAsync(new ResponseData
                         {
                             Status = System.Net.HttpStatusCode.OK,
-                            ContentType = Resource.GetContentType(resPath),
-                            BodyData = res
+                            ContentType = Resource.GetContentType(icoPath),
+                            BodyData = ico
                         }), page);
                     break;
-                case var url when url.StartsWith(OAuth.REDIRECT_URI + "/fonts/"):
-                    var fntPath = request.Url.Substring((OAuth.REDIRECT_URI + "/").Length);
+                case var url when (url.StartsWith("https://login.salesforce.com/") || url.StartsWith("https://test.salesforce.com/")) && url.Contains(".salesforce.com/assets/images/"):
+                    var imgPath = "images/" + request.Url.Split(".salesforce.com/assets/images/", 2).Last();
+                    var img = Resource.GetResourceBytes(imgPath);
+                    if (img == null)
+                        PageInterception(() => request.ContinueAsync(), page);
+                    else
+                        PageInterception(() => request.RespondAsync(new ResponseData
+                        {
+                            Status = System.Net.HttpStatusCode.OK,
+                            ContentType = Resource.GetContentType(imgPath),
+                            BodyData = img
+                        }), page);
+                    break;
+                case var url when (url.StartsWith("https://login.salesforce.com/") || url.StartsWith("https://test.salesforce.com/")) && url.Contains(".salesforce.com/services/fonts/"):
+                    var fntPath = "fonts/" + request.Url.Split(".salesforce.com/services/fonts/", 2).Last();
                     var fnt = Resource.GetResourceBytes(fntPath);
                     if (fnt == null)
-                        PageInterception(() => request.AbortAsync(), page);
+                        PageInterception(() => request.ContinueAsync(), page);
                     else
                         PageInterception(() => request.RespondAsync(new ResponseData
                         {
@@ -206,65 +272,118 @@ namespace SF_DataExport
 
         void Page_RequestFinished(Request request, Page page, JObject appState)
         {
-            Console.WriteLine("Finished " + request.Url);
-        }
-
-        private void Page_RequestFailed(Request request, Page page, JObject appState)
-        {
-            Console.WriteLine("Failed " + request.Url);
-        }
-
-        private void Page_DOMContentLoaded(Page page, JObject appState)
-        {
-            switch (page.Url)
+            switch (page.Target.Url)
             {
-                case var url when IsAuthorizationPage(url):
+                case var url when url.StartsWith(OAuth.REDIRECT_URI + "#") || url.StartsWith(OAuth.REDIRECT_URI_SANDBOX + "#"):
                     Observable.FromAsync(async () =>
                     {
-                        var content = await page.GetContentAsync();
                         await page.SetRequestInterceptionAsync(true);
-                        await page.SetJavaScriptEnabledAsync(true);
-                        var tokensEncoded = Regex.Match(content, Regex.Escape(OAuth.REDIRECT_URI) + "/?[\\?#]([^'\"]+)")?.Groups[1].Value;
-                        if (tokensEncoded != null)
+                        var tokens = HttpUtility.ParseQueryString(url.Split(new[] { '#' }, 2).Last());
+                        if (tokens.Count > 0)
                         {
-                            var tokens = HttpUtility.ParseQueryString(tokensEncoded);
-                            var loginSetting = new JObject();
+                            var newOrg = new JObject();
                             foreach (var key in tokens.AllKeys)
                             {
-                                loginSetting[key] = tokens[key];
+                                newOrg[key] = tokens[key];
                             }
-                            loginSetting["login_url"] = appState["_"]["attemptingDomain"];
+                            newOrg[OAuth.LOGIN_URL] = appState["attemptingDomain"];
 
-                            if (new[] { "access_token", "instance_url" }.All(s => !string.IsNullOrEmpty(loginSetting[s]?.ToString())))
+                            if (new[] { OAuth.ACCESS_TOKEN, OAuth.INSTANCE_URL }.All(s => !string.IsNullOrEmpty(newOrg[s]?.ToString())))
                             {
-                                await OrgSettings.SaveAysnc(json =>
-                                {
-                                    json[loginSetting["instance_url"].ToString()] = loginSetting;
-                                    appState["orgSettings"] = new JArray(json.Properties().Select(p => p.Name));
-                                    appState["organization"] = loginSetting["instance_url"];
-                                    appState["_"]["showOrganization"] = false;
-                                });
+                                await SetOrganizationAsync(page, appState,
+                                    newOrg[OAuth.ACCESS_TOKEN]?.ToString(),
+                                    newOrg[OAuth.INSTANCE_URL]?.ToString(),
+                                    newOrg[OAuth.LOGIN_URL]?.ToString(),
+                                    newOrg[OAuth.REFRESH_TOKEN]?.ToString());
+                                appState["orgOfflineAccess"] = new JArray(OrgSettings.List()
+                                    .Where(org => !string.IsNullOrEmpty(OrgSettings.Get(o => o[org]?[OAuth.REFRESH_TOKEN]?.ToString()))));
+                                appState["orgSettings"] = new JArray(OrgSettings.List());
+                                appState["currentInstanceUrl"] = newOrg[OAuth.INSTANCE_URL] ?? "";
                             }
-                            else if (new[] { "error", "error_description" }.All(s => !string.IsNullOrEmpty(loginSetting[s]?.ToString())))
+                            else if (new[] { "error", "error_description" }.All(s => !string.IsNullOrEmpty(newOrg[s]?.ToString())))
                             {
-                                Console.WriteLine($"Login fail ({loginSetting["error"]})\n${loginSetting["error_description"]}");
+                                appState["currentInstanceUrl"] = "";
+                                Console.WriteLine($"Login fail ({newOrg["error"]})\n${newOrg["error_description"]}");
                             }
                             else
                             {
-                                Console.WriteLine($"Login fail (Unknown)\n${loginSetting}");
+                                appState["currentInstanceUrl"] = "";
+                                Console.WriteLine($"Login fail (Unknown)\n${newOrg}");
                             }
                         }
-                        appState["_"]["attemptingDomain"] = "";
+                        else
+                        {
+                            appState["currentInstanceUrl"] = "";
+                        }
+
+                        appState["attemptingDomain"] = "";
                     })
-                    .Catch((Exception ex) => Observable.Timer(TimeSpan.FromSeconds(1)).SelectMany(_ => Observable.Throw<System.Reactive.Unit>(ex)))
-                    .Retry(3)
-                    .SelectMany(_ => Observable.FromAsync(() => page.GoToAsync(OAuth.REDIRECT_URI)))
+                    .SelectMany(redirectUrl => Observable.FromAsync(() => page.GoToAsync(OAuth.REDIRECT_URI)))
                     .SubscribeOn(TaskPoolScheduler.Default).Subscribe();
                     break;
+                case var url when url.StartsWith(OAuth.REDIRECT_URI + "#") || url.StartsWith(OAuth.REDIRECT_URI_SANDBOX + "#")
+                || url.StartsWith(OAuth.REDIRECT_URI + "?") || url.StartsWith(OAuth.REDIRECT_URI_SANDBOX + "?"):
+                    Observable.FromAsync(() => page.GoToAsync(OAuth.REDIRECT_URI))
+                        .SelectMany(_ => Observable.FromAsync(() => page.ReloadAsync()))
+                        .SubscribeOn(TaskPoolScheduler.Default).Subscribe();
+                    break;
                     //default:
-                    //    Console.WriteLine("ContentLoaded " + Page.Url);
+                    //    Console.WriteLine("Finished " + request.Url);
                     //    break;
             }
+        }
+
+        void Page_RequestFailed(Request request, Page page, JObject appState)
+        {
+            switch (page.Target.Url)
+            {
+                case var url when url.StartsWith(OAuth.REDIRECT_URI + "#") || url.StartsWith(OAuth.REDIRECT_URI_SANDBOX + "#")
+                || url.StartsWith(OAuth.REDIRECT_URI + "?") || url.StartsWith(OAuth.REDIRECT_URI_SANDBOX + "?"):
+                    Observable.FromAsync(() => page.GoToAsync(OAuth.REDIRECT_URI))
+                        .SelectMany(_ => Observable.FromAsync(() => page.ReloadAsync()))
+                        .SubscribeOn(TaskPoolScheduler.Default).Subscribe();
+                    break;
+                    //default:
+                    //    Console.WriteLine("Failed " + request.Url);
+                    //    break;
+            }
+        }
+
+        void Page_DOMContentLoaded(Page page, JObject appState)
+        {
+            //switch (page.Url)
+            //{
+            //    case OAuth.REDIRECT_URI:
+            //    case OAuth.REDIRECT_URI_SANDBOX:
+            //    case var url when url == OAuth.REDIRECT_URI + '/' || url == OAuth.REDIRECT_URI_SANDBOX + '/':
+            //        //appState["isLoading"] = true;
+            //        // break;
+            //        //default:
+            //        //    Console.WriteLine("ContentLoaded " + Page.Url);
+            //        //    break;
+            //}
+        }
+
+        async Task SetOrganizationAsync(
+            Page page,
+            JObject appState,
+            string accessToken,
+            string instanceUrl,
+            string loginUrl,
+            string refreshToken)
+        {
+            await OrgSettings.SaveAysnc(json =>
+            {
+                var settingForSave = new JObject
+                {
+                    [OAuth.ACCESS_TOKEN] = accessToken,
+                    [OAuth.INSTANCE_URL] = instanceUrl,
+                    [OAuth.LOGIN_URL] = loginUrl,
+                    [OAuth.REFRESH_TOKEN] = refreshToken ?? "",
+                };
+                json[instanceUrl] = settingForSave;
+            });
+            await CommitAsync(new JObject { ["orgSettings"] = OrgSettings.Read() }, page);
         }
 
         JObject SubscribeMutation(JObject mutation, JObject state, Page page, JObject appState)
@@ -276,22 +395,131 @@ namespace SF_DataExport
         {
             switch (action?["type"]?.ToString())
             {
-                case "@attemptLogin":
-                    var attemptingDomain = action?["payload"]?.ToString();
-                    if (!string.IsNullOrEmpty(attemptingDomain))
+                case "@removeOrg":
+                    Observable.FromAsync(async () =>
                     {
-                        var url = "https://" + attemptingDomain + "/services/oauth2/authorize" +
-                            "?response_type=token" +
-                            "&client_id=" + HttpUtility.UrlEncode(OAuth.CLIENT_ID) +
-                            "&redirect_uri=" + HttpUtility.UrlEncode(OAuth.REDIRECT_URI) +
-                            "&display=popup";
-                        Observable.Concat(
-                            Observable.FromAsync(() => page.SetRequestInterceptionAsync(false)),
-                            Observable.FromAsync(() => page.GoToAsync(url)).Cast<System.Reactive.Unit>()
-                        ).SubscribeOn(TaskPoolScheduler.Default).Subscribe();
-                        appState["_"]["isLoading"] = true;
-                        appState["_"]["attemptingDomain"] = attemptingDomain;
-                    }
+                        var instanceUrl = action["payload"]?.ToString() ?? "";
+                        await OrgSettings.SaveAysnc(json =>
+                        {
+                            if (json[instanceUrl] != null)
+                            {
+                                json.Remove(instanceUrl);
+                            }
+                        });
+                        await CommitAsync(new JObject
+                        {
+                            ["currentInstanceUrl"] = appState["currentInstanceUrl"]?.ToString() != instanceUrl ? appState["currentInstanceUrl"] : "",
+                            ["orgOfflineAccess"] = new JArray(OrgSettings.List()
+                                .Where(org => !string.IsNullOrEmpty(OrgSettings.Get(o => o[org]?[OAuth.REFRESH_TOKEN]?.ToString())))),
+                            ["orgSettings"] = new JArray(OrgSettings.List()),
+                        }, page);
+                    }).SubscribeOn(TaskPoolScheduler.Default).Subscribe();
+                    break;
+                case "@removeOfflineAccess":
+                    Observable.FromAsync(async () =>
+                    {
+                        var instanceUrl = action["payload"]?.ToString() ?? "";
+                        await OrgSettings.SaveAysnc(json =>
+                        {
+                            if (json[instanceUrl] != null)
+                            {
+                                json[instanceUrl][OAuth.REFRESH_TOKEN] = "";
+                            }
+                        });
+                        await CommitAsync(new JObject
+                        {
+                            ["orgOfflineAccess"] = new JArray(OrgSettings.List()
+                                .Where(org => !string.IsNullOrEmpty(OrgSettings.Get(o => o[org]?[OAuth.REFRESH_TOKEN]?.ToString())))),
+                        }, page);
+                    }).SubscribeOn(TaskPoolScheduler.Default).Subscribe();
+                    break;
+                case "@changeOrgSettingsPath":
+                    Observable.FromAsync(async () =>
+                    {
+                        var newPath = action["payload"]?.ToString() ?? "";
+                        var oldPath = OrgSettings.GetPath();
+                        try
+                        {
+                            var orgData = OrgSettings.Read();
+                            await File.WriteAllTextAsync(newPath, orgData.ToString());
+                            try { File.Delete(oldPath); } catch { }
+                            OrgSettings.SetPath(newPath);
+                            await CommitAsync(new JObject { ["orgSettingsPath"] = OrgSettings.GetPath() }, page);
+                        }
+                        catch { }
+                    }).SubscribeOn(TaskPoolScheduler.Default).Subscribe();
+                    break;
+                case "@attemptLogin":
+                    Observable.FromAsync(async () =>
+                    {
+                        var attemptingDomain = Regex.Replace(action?["payload"]?.ToString() ?? "", "^https?://", "");
+                        if (!string.IsNullOrEmpty(attemptingDomain))
+                        {
+                            if (attemptingDomain != "login.salesforce.com" && attemptingDomain != "test.salesforce.com")
+                            {
+                                var instanceUrl = "https://" + attemptingDomain;
+                                var savedOrg = OrgSettings.Get(o => o[instanceUrl]);
+                                if (savedOrg != null)
+                                {
+                                    var accessToken = savedOrg[OAuth.ACCESS_TOKEN]?.ToString() ?? "";
+                                    var refreshToken = savedOrg[OAuth.REFRESH_TOKEN]?.ToString() ?? "";
+                                    var loginUrl = savedOrg[OAuth.LOGIN_URL]?.ToString() ?? "";
+                                    var client = new DNFClient(instanceUrl, accessToken, refreshToken);
+
+                                    if (loginUrl != "" && loginUrl != attemptingDomain)
+                                    {
+                                        attemptingDomain = loginUrl;
+                                    }
+
+                                    if (refreshToken != "")
+                                    {
+                                        try
+                                        {
+                                            await client.TokenRefreshAsync(new Uri(loginUrl), GetClientId(loginUrl));
+                                            await SetOrganizationAsync(page, appState,
+                                                client.AccessToken,
+                                                client.InstanceUrl,
+                                                loginUrl,
+                                                client.RefreshToken);
+                                            await CommitAsync(new JObject { ["currentInstanceUrl"] = client.InstanceUrl }, page);
+                                            return;
+                                        }
+                                        catch
+                                        {
+
+                                        }
+                                    }
+                                    else if (accessToken != "")
+                                    {
+                                        try
+                                        {
+                                            var userInfo = await client.UserInfo();
+                                            if (userInfo != null)
+                                            {
+                                                return;
+                                            }
+                                        }
+                                        catch { }
+                                    }
+                                }
+                            }
+                            var url = "https://" + attemptingDomain + "/services/oauth2/authorize" +
+                                "?response_type=token" +
+                                "&client_id=" + HttpUtility.UrlEncode(GetClientId(attemptingDomain)) +
+                                "&redirect_uri=" + HttpUtility.UrlEncode(GetRedirectUrl(attemptingDomain)) +
+                                "&display=popup";
+                            PostingUrls.TryAdd(url, DateTime.Now);
+                            Observable.Concat(
+                                Observable.FromAsync(() => page.SetRequestInterceptionAsync(false)),
+                                Observable.FromAsync(() => page.GoToAsync(url)).Cast<System.Reactive.Unit>()
+                            ).SubscribeOn(TaskPoolScheduler.Default).Subscribe();
+                            await CommitAsync(new JObject
+                            {
+                                ["isLoading"] = true,
+                                ["attemptingDomain"] = attemptingDomain,
+                            }, page);
+                        }
+                    }).SubscribeOn(TaskPoolScheduler.Default).Subscribe();
                     break;
             }
             return null;
@@ -322,18 +550,13 @@ namespace SF_DataExport
             return launchOpts;
         }
 
-        bool IsAuthorizationPage(string url)
-        {
-            return url.EndsWith("/_ui/identity/oauth/ui/AuthorizationPage");
-        }
-
         public void PageInterception(Func<Task> func, Page page)
         {
             Observable.FromAsync(func)
-            .Catch((Exception ex) => Observable.Concat(
-                Observable.FromAsync(() => page.SetRequestInterceptionAsync(true)),
-                Observable.Timer(TimeSpan.FromSeconds(1)).SelectMany(_ => Observable.Throw<System.Reactive.Unit>(ex))
-            )).Retry(3)
+            //.Catch((Exception ex) => Observable.Concat(
+            //    Observable.FromAsync(() => page.SetRequestInterceptionAsync(true)),
+            //    Observable.Timer(TimeSpan.FromSeconds(1)).SelectMany(_ => Observable.Throw<System.Reactive.Unit>(ex))
+            //)).Retry(3)
             .Catch((Exception ex) => Observable.Empty<System.Reactive.Unit>())
             .SubscribeOn(TaskPoolScheduler.Default).Subscribe();
         }

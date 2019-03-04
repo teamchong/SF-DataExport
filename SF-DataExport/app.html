@@ -1,330 +1,66 @@
-﻿<div id="app" style="padding:1em;">
-    <div class="slds-spinner slds-spinner_medium" v-if="isLoading">
-        <span class="slds-assistive-text">Loading</span>
-        <div class="slds-spinner__dot-a"></div>
-        <div class="slds-spinner__dot-b"></div>
-    </div>
-    <div class="slds-backdrop slds-backdrop_open" v-if="isLoading"></div>
+﻿<script>
+    const store = new Vuex.Store({
+        state: "<<appState>>",
+        mutations: { commit(state, { name, value }) { state[name] = value; } },
+        actions: { dispatch(_, { type, payload }) { console.log({ type, payload }); } },
+    });
 
-    <header class="slds-global-header_container">
-        <div class="slds-global-header slds-grid slds-grid_align-spread">
-            <div class="slds-global-header__item">
-                <img :src="salesforceLogoUri" />
-            </div>
-            <div class="slds-global-header__item slds-global-header__item_search" v-if="organization">
-                <div class="slds-form-element">
-                    <label class="slds-form-element__label slds-assistive-text" for="combobox-id-1">Search Salesforce</label>
-                    <div class="slds-form-element__control">
-                        <div class="slds-combobox-group">
-                            <div class="slds-combobox_object-switcher slds-combobox-addon_start">
-                                <div class="slds-form-element">
-                                    <label class="slds-form-element__label slds-assistive-text" for="objectswitcher-combobox-id-1">Filter Search by:</label>
-                                    <div class="slds-form-element__control">
-                                        <div class="slds-combobox_container">
-                                            <div class="slds-combobox slds-dropdown-trigger slds-dropdown-trigger_click" aria-controls="primary-search-combobox-id-1" aria-expanded="false" aria-haspopup="listbox" role="combobox">
-                                                <div class="slds-combobox__form-element slds-input-has-icon slds-input-has-icon_right" role="none">
-                                                    <input type="text" class="slds-input slds-combobox__input slds-combobox__input-value" id="objectswitcher-combobox-id-1" aria-controls="objectswitcher-listbox-id-1" autoComplete="off" role="textbox" placeholder=" " value="Accounts" />
-                                                    <span class="slds-icon_container slds-icon-utility-down slds-input__icon slds-input__icon_right">
-                                                        <svg class="slds-icon slds-icon slds-icon_xx-small slds-icon-text-default">
-                                                            <use xlink:href="/assets/icons/utility-sprite/svg/symbols.svg#down"></use>
-                                                        </svg>
-                                                    </span>
-                                                </div>
-                                                <div id="objectswitcher-listbox-id-1" class="slds-dropdown slds-dropdown_length-5 slds-dropdown_x-small slds-dropdown_left" role="listbox">
-                                                    <ul class="slds-listbox slds-listbox_vertical" role="group" aria-label="Suggested for you">
-                                                        <li role="presentation" class="slds-listbox__item">
-                                                            <div id="object0" class="slds-media slds-listbox__option slds-listbox__option_plain slds-media_small" role="presentation">
-                                                                <h3 class="slds-listbox__option-header" role="presentation">Suggested for you</h3>
-                                                            </div>
-                                                        </li>
-                                                        <li role="presentation" class="slds-listbox__item">
-                                                            <div id="object1" class="slds-media slds-listbox__option slds-listbox__option_plain slds-media_small slds-is-selected" role="option">
-                                                                <span class="slds-media__figure slds-listbox__option-icon">
-                                                                    <span class="slds-icon_container slds-icon-utility-check slds-current-color">
-                                                                        <svg class="slds-icon slds-icon_x-small">
-                                                                            <use xlink:href="/assets/icons/utility-sprite/svg/symbols.svg#check"></use>
-                                                                        </svg>
-                                                                    </span>
-                                                                </span>
-                                                                <span class="slds-media__body">
-                                                                    <span class="slds-truncate" title="Accounts">
-                                                                        <span class="slds-assistive-text">Current Selection:</span> Accounts
-                                                                    </span>
-                                                                </span>
-                                                            </div>
-                                                        </li>
-                                                        <li role="presentation" class="slds-listbox__item">
-                                                            <div id="object2" class="slds-media slds-listbox__option slds-listbox__option_plain slds-media_small" role="option">
-                                                                <span class="slds-media__figure slds-listbox__option-icon"></span>
-                                                                <span class="slds-media__body">
-                                                                    <span class="slds-truncate" title="Reports"> Reports</span>
-                                                                </span>
-                                                            </div>
-                                                        </li>
-                                                        <li role="presentation" class="slds-listbox__item">
-                                                            <div id="object3" class="slds-media slds-listbox__option slds-listbox__option_plain slds-media_small" role="option">
-                                                                <span class="slds-media__figure slds-listbox__option-icon"></span>
-                                                                <span class="slds-media__body">
-                                                                    <span class="slds-truncate" title="Contacts"> Contacts</span>
-                                                                </span>
-                                                            </div>
-                                                        </li>
-                                                        <li role="presentation" class="slds-listbox__item">
-                                                            <div id="object4" class="slds-media slds-listbox__option slds-listbox__option_plain slds-media_small" role="option">
-                                                                <span class="slds-media__figure slds-listbox__option-icon"></span>
-                                                                <span class="slds-media__body">
-                                                                    <span class="slds-truncate" title="Files"> Files</span>
-                                                                </span>
-                                                            </div>
-                                                        </li>
-                                                        <li role="presentation" class="slds-listbox__item">
-                                                            <div id="object5" class="slds-media slds-listbox__option slds-listbox__option_plain slds-media_small" role="option">
-                                                                <span class="slds-media__figure slds-listbox__option-icon"></span>
-                                                                <span class="slds-media__body">
-                                                                    <span class="slds-truncate" title="Groups"> Groups</span>
-                                                                </span>
-                                                            </div>
-                                                        </li>
-                                                        <li role="presentation" class="slds-listbox__item">
-                                                            <div id="object6" class="slds-media slds-listbox__option slds-listbox__option_plain slds-media_small" role="option">
-                                                                <span class="slds-media__figure slds-listbox__option-icon"></span>
-                                                                <span class="slds-media__body">
-                                                                    <span class="slds-truncate" title="Leads"> Leads</span>
-                                                                </span>
-                                                            </div>
-                                                        </li>
-                                                        <li role="presentation" class="slds-listbox__item">
-                                                            <div id="object7" class="slds-media slds-listbox__option slds-listbox__option_plain slds-media_small" role="option">
-                                                                <span class="slds-media__figure slds-listbox__option-icon"></span>
-                                                                <span class="slds-media__body">
-                                                                    <span class="slds-truncate" title="Notes"> Notes</span>
-                                                                </span>
-                                                            </div>
-                                                        </li>
-                                                    </ul>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="slds-combobox_container slds-combobox-addon_end">
-                                <div class="slds-combobox slds-dropdown-trigger slds-dropdown-trigger_click" aria-expanded="false" aria-haspopup="listbox" id="primary-search-combobox-id-1" role="combobox">
-                                    <div class="slds-combobox__form-element slds-input-has-icon slds-input-has-icon_left slds-global-search__form-element" role="none">
-                                        <span class="slds-icon_container slds-icon-utility-search slds-input__icon slds-input__icon_left">
-                                            <svg class="slds-icon slds-icon slds-icon_xx-small slds-icon-text-default">
-                                                <use xlink:href="/assets/icons/utility-sprite/svg/symbols.svg#search"></use>
-                                            </svg>
-                                        </span>
-                                        <input type="text" class="slds-input slds-combobox__input" id="combobox-id-1" aria-autocomplete="list" aria-controls="search-listbox-id-1" autoComplete="off" role="textbox" placeholder="Search Salesforce" />
-                                    </div>
-                                    <div id="search-listbox-id-1" class="slds-dropdown slds-dropdown_length-with-icon-7 slds-dropdown_fluid" role="listbox">
-                                        <ul class="slds-listbox slds-listbox_vertical" role="group" aria-label="Recent Items">
-                                            <li role="presentation" class="slds-listbox__item">
-                                                <div id="option0" class="slds-media slds-listbox__option slds-listbox__option_plain slds-media_center" role="presentation">
-                                                    <h3 class="slds-listbox__option-header" role="presentation">Recent Items</h3>
-                                                </div>
-                                            </li>
-                                            <li role="presentation" class="slds-listbox__item">
-                                                <div id="option1" class="slds-media slds-listbox__option slds-listbox__option_entity slds-listbox__option_has-meta" role="option">
-                                                    <span class="slds-media__figure slds-listbox__option-icon">
-                                                        <span class="slds-icon_container slds-icon-standard-opportunity">
-                                                            <svg class="slds-icon slds-icon_small">
-                                                                <use xlink:href="/assets/icons/standard-sprite/svg/symbols.svg#opportunity"></use>
-                                                            </svg>
-                                                        </span>
-                                                    </span>
-                                                    <span class="slds-media__body">
-                                                        <span class="slds-listbox__option-text slds-listbox__option-text_entity">Salesforce - 1,000 Licenses</span>
-                                                        <span class="slds-listbox__option-meta slds-listbox__option-meta_entity">Opportunity • Propecting</span>
-                                                    </span>
-                                                </div>
-                                            </li>
-                                            <li role="presentation" class="slds-listbox__item">
-                                                <div id="option2" class="slds-media slds-listbox__option slds-listbox__option_entity slds-listbox__option_has-meta" role="option">
-                                                    <span class="slds-media__figure slds-listbox__option-icon">
-                                                        <span class="slds-icon_container slds-icon-standard-contact">
-                                                            <svg class="slds-icon slds-icon_small">
-                                                                <use xlink:href="/assets/icons/standard-sprite/svg/symbols.svg#contact"></use>
-                                                            </svg>
-                                                        </span>
-                                                    </span>
-                                                    <span class="slds-media__body">
-                                                        <span class="slds-listbox__option-text slds-listbox__option-text_entity">Art Vandelay</span>
-                                                        <span class="slds-listbox__option-meta slds-listbox__option-meta_entity">Contact • avandelay@vandelay.com</span>
-                                                    </span>
-                                                </div>
-                                            </li>
-                                            <li role="presentation" class="slds-listbox__item">
-                                                <div id="option3" class="slds-media slds-listbox__option slds-listbox__option_entity slds-listbox__option_has-meta" role="option">
-                                                    <span class="slds-media__figure slds-listbox__option-icon">
-                                                        <span class="slds-icon_container slds-icon-standard-account">
-                                                            <svg class="slds-icon slds-icon_small">
-                                                                <use xlink:href="/assets/icons/standard-sprite/svg/symbols.svg#account"></use>
-                                                            </svg>
-                                                        </span>
-                                                    </span>
-                                                    <span class="slds-media__body">
-                                                        <span class="slds-listbox__option-text slds-listbox__option-text_entity">Vandelay Industries</span>
-                                                        <span class="slds-listbox__option-meta slds-listbox__option-meta_entity">Account • San Francisco</span>
-                                                    </span>
-                                                </div>
-                                            </li>
-                                            <li role="presentation" class="slds-listbox__item">
-                                                <div id="option4" class="slds-media slds-listbox__option slds-listbox__option_entity slds-listbox__option_has-meta" role="option">
-                                                    <span class="slds-media__figure slds-listbox__option-icon">
-                                                        <span class="slds-icon_container slds-icon-standard-event">
-                                                            <svg class="slds-icon slds-icon_small">
-                                                                <use xlink:href="/assets/icons/standard-sprite/svg/symbols.svg#event"></use>
-                                                            </svg>
-                                                        </span>
-                                                    </span>
-                                                    <span class="slds-media__body">
-                                                        <span class="slds-listbox__option-text slds-listbox__option-text_entity">Salesforce UK 2016 Events</span>
-                                                        <span class="slds-listbox__option-meta slds-listbox__option-meta_entity">Event • $20,000</span>
-                                                    </span>
-                                                </div>
-                                            </li>
-                                            <li role="presentation" class="slds-listbox__item">
-                                                <div id="option5" class="slds-media slds-listbox__option slds-listbox__option_entity slds-listbox__option_has-meta" role="option">
-                                                    <span class="slds-media__figure slds-listbox__option-icon">
-                                                        <span class="slds-icon_container slds-icon-standard-lead">
-                                                            <svg class="slds-icon slds-icon_small">
-                                                                <use xlink:href="/assets/icons/standard-sprite/svg/symbols.svg#lead"></use>
-                                                            </svg>
-                                                        </span>
-                                                    </span>
-                                                    <span class="slds-media__body">
-                                                        <span class="slds-listbox__option-text slds-listbox__option-text_entity">H.E. Pennypacker</span>
-                                                        <span class="slds-listbox__option-meta slds-listbox__option-meta_entity">Lead • Nursing</span>
-                                                    </span>
-                                                </div>
-                                            </li>
-                                        </ul>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="slds-global-header__item">
-                <ul class="slds-global-actions">
-                    <li class="slds-global-actions__item">
-                        <div class="slds-global-actions__favorites slds-dropdown-trigger slds-dropdown-trigger_click">
-                            <div class="slds-button-group">
-                                <button class="slds-button slds-button_icon slds-global-actions__favorites-action slds-button_icon slds-button_icon-border slds-button_icon-small" aria-pressed="false" title="Toggle Favorites">
-                                    <svg class="slds-button__icon">
-                                        <use xlink:href="/assets/icons/utility-sprite/svg/symbols.svg#favorite"></use>
-                                    </svg>
-                                    <span class="slds-assistive-text">Toggle Favorite</span>
-                                </button>
-                                <button class="slds-button slds-button_icon slds-global-actions__favorites-more slds-button_icon slds-button_icon-border slds-button_icon-small" title="View Favorites">
-                                    <svg class="slds-button__icon slds-button__icon_small">
-                                        <use xlink:href="/assets/icons/utility-sprite/svg/symbols.svg#down"></use>
-                                    </svg>
-                                    <span class="slds-assistive-text">View Favorites</span>
-                                </button>
-                            </div>
-                        </div>
-                    </li>
-                    <li class="slds-global-actions__item">
-                        <div class="slds-dropdown-trigger slds-dropdown-trigger_click">
-                            <button class="slds-button slds-button_icon slds-button_icon slds-button_icon-container slds-button_icon-small slds-global-actions__task slds-global-actions__item-action" aria-haspopup="true" title="Global Actions">
-                                <svg class="slds-button__icon">
-                                    <use xlink:href="/assets/icons/utility-sprite/svg/symbols.svg#add"></use>
-                                </svg>
-                                <span class="slds-assistive-text">Global Actions</span>
-                            </button>
-                        </div>
-                    </li>
-                    <li class="slds-global-actions__item">
-                        <div class="slds-dropdown-trigger slds-dropdown-trigger_click">
-                            <button class="slds-button slds-button_icon slds-button_icon slds-button_icon-container slds-button_icon-small slds-global-actions__help slds-global-actions__item-action" aria-haspopup="true" title="Help and Training">
-                                <svg class="slds-button__icon slds-global-header__icon">
-                                    <use xlink:href="/assets/icons/utility-sprite/svg/symbols.svg#question"></use>
-                                </svg>
-                                <span class="slds-assistive-text">Help and Training</span>
-                            </button>
-                        </div>
-                    </li>
-                    <li class="slds-global-actions__item">
-                        <div class="slds-dropdown-trigger slds-dropdown-trigger_click">
-                            <button class="slds-button slds-button_icon slds-button_icon slds-button_icon-container slds-button_icon-small slds-global-actions__setup slds-global-actions__item-action" aria-haspopup="true" title="Setup">
-                                <svg class="slds-button__icon slds-global-header__icon">
-                                    <use xlink:href="/assets/icons/utility-sprite/svg/symbols.svg#setup"></use>
-                                </svg>
-                                <span class="slds-assistive-text">Setup</span>
-                            </button>
-                        </div>
-                    </li>
-                    <li class="slds-global-actions__item">
-                        <div class="slds-dropdown-trigger slds-dropdown-trigger_click">
-                            <button class="slds-button slds-button_icon slds-button_icon slds-button_icon-container slds-button_icon-small slds-global-actions__notifications slds-global-actions__item-action" title="no new notifications" aria-live="assertive" aria-atomic="true">
-                                <svg class="slds-button__icon slds-global-header__icon">
-                                    <use xlink:href="/assets/icons/utility-sprite/svg/symbols.svg#notification"></use>
-                                </svg>
-                                <span class="slds-assistive-text">no new notifications</span>
-                            </button>
-                            <span class="slds-notification-badge">0</span>
-                        </div>
-                    </li>
-                    <li class="slds-global-actions__item">
-                        <div class="slds-dropdown-trigger slds-dropdown-trigger_click">
-                            <button class="slds-button slds-global-actions__avatar slds-global-actions__item-action" title="person name" aria-haspopup="true">
-                                <span class="slds-avatar slds-avatar_circle slds-avatar_medium">
-                                    <img alt="Person name" src="/assets/images/avatar2.jpg" title="User avatar" />
-                                </span>
-                            </button>
-                        </div>
-                    </li>
-                </ul>
-            </div>
-        </div>
-    </header>
+    Vue.config.devtools = true;
+    Vue.filter('orgname', function (value) {
+        if (!value) return ''
+        return value.replace(/^https:\/\/|\.my\.salesforce\.com$|\.salesforce\.com$/ig, '');
+    });
+    Vue.mixin({
+        methods: {
+            dispatch(type, payload) { store.dispatch('dispatch', { type, payload }); },
+            hasOfflineAccess(org) { return store.state.orgOfflineAccess.indexOf(org) >= 0; },
+        }
+    });
+</script>
 
-    <div v-else>
-        <h3>Command list</h3>
-        <ul style="padding:1em;">
-            <li style="margin:2em;">
-                <button class="slds-button slds-button_neutral" style="width:100%;padding:2em;font-size:200%;">
-                    Download Data Export
-                </button>
-            </li>
-        </ul>
-        <hr />
-    </div>
-
-    <connection-modal v-if="organization || showOrganization" />
-</div>
 
 <script type="text/x-template" id="connection-template">
     <div style="height: 640px;">
-        <section role="dialog" tabindex="-1" aria-labelledby="modal-heading-01" aria-modal="true" aria-describedby="modal-content-id-1" class="slds-modal slds-fade-in-open">
+        <section tabindex="-1" class="slds-modal slds-fade-in-open">
             <div class="slds-modal__container">
                 <header class="slds-modal__header">
-                    <button class="slds-button slds-button_icon slds-modal__close slds-button_icon-inverse" title="Close" v-if="organization">
+                    <button class="slds-button slds-button_icon slds-modal__close slds-button_icon-inverse" title="Close" v-if="currentInstanceUrl" @click="dispatch('orgOpened',false)">
                         <svg class="slds-button__icon slds-button__icon_large">
                             <use xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="/assets/icons/utility-sprite/svg/symbols.svg#close" />
                         </svg>
                         <span class="slds-assistive-text">Close</span>
                     </button>
-                    <h2 id="modal-heading-01" class="slds-text-heading_medium slds-hyphenate">Manage Connections</h2>
+                    <h2 id="modal-heading-01" class="slds-text-heading_medium slds-hyphenate">Manage Organizations</h2>
                 </header>
                 <div class="slds-modal__content slds-p-around_medium" id="modal-content-id-1">
                     <div v-if="orgSettings.length">
-                        <blockquote>Saved Organizations</blockquote>
+                        <h3>Saved Organizations</h3>
                         <ul>
-                            <li style="margin:2em;" v-for="orgSettings">
+                            <li style="margin:2em;" v-for="org in orgSettings">
                                 <div class="slds-box">
-                                    <button class="slds-button slds-button_neutral" style="width:100%;padding:2em;font-size:200%;text-align:left">
-                                        {{name}}
+                                    <button class="slds-button slds-button_neutral" style="width:100%;padding:1em;font-size:150%;text-align:left;margin-bottom:0.2em" @click="dispatch('@attemptLogin',org)">
+                                        <svg class="slds-button__icon slds-button__icon_left slds-icon_large" style="color:#009CDF">
+                                            <use xlink:href="/assets/icons/standard-sprite/svg/symbols.svg#default"></use>
+                                        </svg>
+                                        {{org|orgname}}
+                                    </button>
+
+                                    <button class="slds-button slds-button_neutral" @click="dispatch('@removeOrg',org)">
+                                        <svg class="slds-button__icon slds-button__icon_left" aria-hidden="true">
+                                            <use xlink:href="/assets/icons/action-sprite/svg/symbols.svg#remove"></use>
+                                        </svg> Remove Org Settings
+                                    </button>
+
+                                    <button class="slds-button slds-button_neutral" v-if="hasOfflineAccess(org)" @click="dispatch('@removeOfflineAccess',org)">
+                                        <svg class="slds-button__icon slds-button__icon_left" aria-hidden="true">
+                                            <use xlink:href="/assets/icons/action-sprite/svg/symbols.svg#remove"></use>
+                                        </svg> Remove Offline Access
                                     </button>
                                 </div>
                             </li>
                         </ul>
                     </div>
-                    <blockquote>New Organization</blockquote>
+                    <h3>New Organization</h3>
                     <ul>
                         <li style="margin:2em;">
                             <div class="slds-box">
@@ -346,7 +82,7 @@
                                 </button>
                             </div>
                         </li>
-                        <li style="margin:2em;">
+                        <!--<li style="margin:2em;">
                             <div class="slds-box">
                                 <button class="slds-button slds-button_neutral" style="width:100%;padding:1em;font-size:150%;text-align:left" @click="dispatch('@attemptLogin',customLoginUrl)" :disabled="!customLoginUrl">
                                     <svg class="slds-button__icon slds-button__icon_left slds-icon_large" style="color:#009CDF">
@@ -360,66 +96,124 @@
                                     </div>
                                 </div>
                             </div>
-                        </li>
+                        </li>-->
                     </ul>
+                    <hr />
+                    <div class="slds-form-element">
+                        <div class="slds-clearfix">
+                            <div class="slds-float_right">
+                                <button class="slds-button slds-button_success" @click="dispatch('@changeOrgSettingsPath',orgSettingsPath)">Save path</button>
+                            </div>
+                            <label class="slds-form-element__label" for="text-input-id-1">Org settings file path</label>
+                        </div>
+                        <div class="slds-form-element__control" style="margin-top:0.1em;">
+                            <input placeholder="Placeholder Text" class="slds-input" type="text" v-model="orgSettingsPath" />
+                        </div>
+                    </div>
                 </div>
-                <footer class="slds-modal__footer" v-if="organization">
-                    <button class="slds-button slds-button_neutral">Cancel</button>
+                <footer class="slds-modal__footer" v-if="currentInstanceUrl">
+                    <button class="slds-button slds-button_neutral" @click="dispatch('orgOpened',false)">Cancel</button>
                 </footer>
             </div>
         </section>
         <div class="slds-backdrop slds-backdrop_open"></div>
     </div>
 </script>
-
 <script>
-    const store = new Vuex.Store({
-        state: "<<appState>>",
-        mutations: {
-            setAppPage(state, appPage) {
-                state.appPage = appPage;
-            },
-            setIsLoading(state, isLoading) {
-                state.isLoading = isLoading;
-            },
-            attemptLogin(state, attemptingDomain) {
-                state.attemptingDomain = attemptingDomain;
-            },
-        },
-        actions: { dispatch() {} },
-    });
-
     Vue.component('connection-modal', {
         template: '#connection-template',
-        data() {
-            return { customLoginUrlInput: '', customLoginUrl: '' }
-        },
+        //data() {
+        //    return { customLoginUrlInput: '', customLoginUrl: '' }
+        //},
         computed: {
-            orgSettings() { return getState('orgSettings'); },
-            organization() { return getState('organization'); },
-            customLoginUrlHint() {
-                return this.customLoginUrl ? this.customLoginUrl : '*.my.salesforce.com';
-            }
+            currentInstanceUrl() { return this.$store.state.currentInstanceUrl; },
+            //customLoginUrlHint() { return this.customLoginUrl ? this.customLoginUrl : '*.my.salesforce.com'; }
+            orgSettings() { return this.$store.state.orgSettings; },
+            orgSettingsPath() { return this.$store.state.orgSettingsPath; },
         },
-        methods: { dispatch(type, payload) { this.$store.dispatch('dispatch', { type, payload }); } },
-        watch: {
-            customLoginUrlInput(newVal) {
-                this.customLoginUrl = !newVal ? '' : newVal.replace(/\.my\.salesforce\.com$/i, '') + '.my.salesforce.com';
-            }
-        },
+        //watch: {
+        //    customLoginUrlInput(newVal) {
+        //        this.customLoginUrl = !newVal ? '' : newVal.replace(/\.my\.salesforce\.com$/i, '') + '.my.salesforce.com';
+        //    }
+        //},
     });
+</script>
 
+<div id="app" style="padding:1em;">
+
+    <div class="slds-spinner slds-spinner_medium" v-if="isLoading">
+        <span class="slds-assistive-text">Loading</span>
+        <div class="slds-spinner__dot-a"></div>
+        <div class="slds-spinner__dot-b"></div>
+    </div>
+    <div class="slds-backdrop slds-backdrop_open" v-if="isLoading"></div>
+
+    <header class="slds-global-header_container">
+        <div class="slds-global-header slds-grid slds-grid_align-spread">
+            <div class="slds-global-header__item">
+                <img :src="salesforceLogoUri" />
+
+            </div>
+            <div class="slds-global-header__item">
+                <h1 v-if="currentInstanceUrl">{{currentInstanceUrl|orgname}}</h1>
+            </div>
+            <div class="slds-global-header__item slds-global-header__item_search"></div>
+            <div class="slds-global-header__item">
+                <ul class="slds-global-actions">
+                    <li class="slds-global-actions__item">
+                        Organizations
+                    </li>
+                    <li class="slds-global-actions__item">
+                        <div class="slds-dropdown-trigger slds-dropdown-trigger_click">
+                            <button class="slds-button slds-button_icon slds-button_icon slds-button_icon-container slds-button_icon-small slds-global-actions__setup slds-global-actions__item-action" title="Setup" @click="dispatch('orgOpened',true)">
+                                <svg class="slds-button__icon slds-global-header__icon">
+                                    <use xlink:href="/assets/icons/standard-sprite/svg/symbols.svg#picklist_choice"></use>
+                                </svg>
+                            </button>
+                        </div>
+                    </li>
+                    <li class="slds-global-actions__item">
+                        <div class="slds-dropdown-trigger slds-dropdown-trigger_click">
+                            <button class="slds-button slds-global-actions__avatar slds-global-actions__item-action">
+                                <span class="slds-avatar slds-avatar_circle slds-avatar_medium">
+                                    <img alt="Person name" src="/assets/images/avatar2.jpg" title="User avatar" />
+                                </span>
+                            </button>
+                        </div>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </header>
+
+    <div>
+        <h3>Command list</h3>
+        <ul style="padding:1em;">
+            <li style="margin:2em;">
+                <button class="slds-button slds-button_neutral" style="width:100%;padding:2em;font-size:200%;">
+                    Download Data Export
+                </button>
+            </li>
+        </ul>
+        <hr />
+    </div>
+
+    <connection-modal v-if="(!currentInstanceUrl || orgOpened) && !attemptLoginResult" />
+</div>
+<script>
     var app = new Vue({
         el: '#app',
         store,
         computed: {
-            appPage() { return store.state.appPage; },
-            orgSettings() { return getState('orgSettings'); },
-            organization() { return getState('organization'); },
-            salesforceLogoUri() { return store.state.salesforceLogoUri; },
-            isLoading() { return store.state.isLoading; },
+            appPage() { return this.$store.state.appPage; },
+            attemptingDomain() { return this.$store.state.attemptingDomain; },
+            attemptLoginResult() { return this.$store.state.attemptLoginResult; },
+            currentInstanceUrl() { return this.$store.state.currentInstanceUrl; },
+            isLoading() { return this.$store.state.isLoading; },
+            orgOpened() { return this.$store.state.orgOpened; },
+            orgSettings() { return this.$store.state.orgSettings; },
+            salesforceLogoUri() { return this.$store.state.salesforceLogoUri; },
         },
-        methods: { dispatch(type, payload) { store.dispatch('dispatch', { type, payload }); } },
     });
 
     const subMutation = new rxjs.Subject();
@@ -427,7 +221,9 @@
         rxjs.operators.concatMap(({ mutation, state }) => rxjs.from(subscribeMutation(mutation, state)).pipe(
             rxjs.operators.switchMap(changes => rxjs.defer(() => {
                 if (changes) {
-                    store.commit(changes);
+                    for (var t in changes) {
+                        store.commit('commit', { name: t, value: changes[t] });
+                    }
                 }
             }))
         )),
@@ -439,14 +235,16 @@
             )
         )
     ).subscribe();
-    store.subscribe((mutation, state) => subMutation({ mutation, state }));
+    store.subscribe((mutation, state) => subMutation.next({ mutation, state }));
 
     const subAction = new rxjs.Subject();
     subAction.pipe(
         rxjs.operators.concatMap(({ action, state }) => rxjs.from(subscribeAction(action, state)).pipe(
             rxjs.operators.switchMap(changes => rxjs.defer(() => {
                 if (changes) {
-                    store.commit(changes);
+                    for (var t in changes) {
+                        store.commit('commit', { name: t, value: changes[t] });
+                    }
                 }
             }))
         )),
@@ -461,6 +259,29 @@
     store.subscribeAction(({ type: _, payload: action }, state) => {
         if (/^@/.test(action.type)) {
             subAction.next({ action, state });
+        } else {
+            store.commit('commit', { name: action.type, value: action.payload });
         }
     });
+
+    if (store.state.attemptingDomain) {
+        var login_url = store.state.attemptingDomain;
+        store.commit('commit', { name: 'attemptLogin', value: '' });
+
+        var result = {};
+        var hashes = location.hash.replace(/^#/, '').split('&');
+        for (var hash of hashes) {
+            var [name, value] = hash.split('=');
+            result[decodeURIComponent(name || '')] = decodeURIComponent(value || '');
+        }
+        result.login_url = login_url;
+
+        if (result.access_token && params.instance_url) {
+            store.commit('commit', { name: 'attemptLoginResult', value: result });
+        } else {
+            store.commit('commit', { name: 'attemptLoginResult', value: null });
+        }
+    }
+
+    store.commit('commit', { name: 'isLoading', value: false });
 </script>
