@@ -1,0 +1,494 @@
+﻿<script>
+    const { defere, from, interval, of, Subject } = rxjs;
+    const { bufferTime, concat, concatMap, delayWhen, filter, ignoreElements, retryWhen, switchMap, takeWhile } = rxjs.operators;
+
+    const dispatchSubject = new Subject();
+    dispatchSubject.pipe(
+        bufferTime(100),
+        filter(actions => !!actions.length),
+        concatMap(actions => from(subscribeDispatch(actions))),
+        delayWhen(() =>
+            interval(1000).pipe(
+                takeWhile(_ => typeof subscribeDispatch === 'undefined'),
+                ignoreElements(),
+                concat(of(1)),
+            )
+        ),
+        retryWhen(errors => errors.pipe(
+            tap(err => {
+                store.commit('setStates', [{ isLoading: true }]);
+                console.error(err);
+            }),
+            delayWhen(val => timer(5000).pipe(tap(_ => {
+                store.commit('setStates', [{ isLoading: false }]);
+            }))),
+        )),
+    ).subscribe();
+
+    const store = new Vuex.Store({
+        state: appState,
+        mutations: {
+            setStates(state, newStates) {
+                const len = newStates.length;
+
+                for (var i = 0; i < len; i++) {
+                    const newState = newStates[i];
+
+                    for (const stateName in newState) {
+                        state[stateName] = newState[stateName];
+                    }
+                }
+            },
+        },
+    });
+
+    const storeCommit = (newStates) => {
+        if (newStates && newStates.length) {
+            store.commit('setStates', newStates);
+        }
+    };
+
+    Vue.config.devtools = true;
+    Vue.filter('orgname', (value) => {
+        if (!value) return ''
+        return value.replace(/^https:\/\/|\.my\.salesforce\.com$|\.salesforce\.com$/ig, '');
+    });
+    Vue.filter('empty', (value, emptyValue) => {
+        return value || emptyValue || '';
+    });
+    Vue.mixin({
+        methods: {
+            dispatch(type, payload) { dispatchSubject.next({ type, payload }); },
+            orgHasOfflineAccess(org) { return this.$store.state.orgOfflineAccess.indexOf(org) >= 0; },
+            orgIsSandbox(org) { return this.$store.state.orgSandboxes.indexOf(org) >= 0; },
+        },
+    });
+    Vue.component('v-select', VueSelect.VueSelect);
+</script>
+
+<script type="text/x-template" id="spinner-template">
+    <div class="slds-spinner">
+        <span class="slds-assistive-text">Loading</span>
+        <div class="slds-spinner__dot-a"></div>
+        <div class="slds-spinner__dot-b"></div>
+    </div>
+</script>
+<script>
+    Vue.component('spinner', {
+        template: '#spinner-template'
+    });
+</script>
+
+<script type="text/x-template" id="button-iconleft-template">
+    <svg class="slds-button__icon slds-button__icon_left">
+        <use :xlink:href="'/assets/icons/'+type+'-sprite/svg/symbols.svg#'+icon"></use>
+    </svg>
+</script>
+<script>
+    Vue.component('button-iconleft', {
+        props: ['icon', 'type'],
+        template: '#button-iconleft-template'
+    });
+</script>
+
+<script type="text/x-template" id="download-dataexport-tab-template">
+    <div>
+        <div class="slds-page-header">
+            <div class="slds-page-header__row">
+                <div class="slds-page-header__col-title">
+                    <div class="slds-media">
+                        <div class="slds-media__figure">
+                            <span class="slds-icon_container slds-icon-standard-folder" title="Download Data Export">
+                                <svg class="slds-icon slds-page-header__icon">
+                                    <use xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="/assets/icons/standard-sprite/svg/symbols.svg#folder" />
+                                </svg>
+                            </span>
+                        </div>
+                        <div class="slds-media__body">
+                            <div class="slds-page-header__name">
+                                <div class="slds-page-header__name-title">
+                                    <h1>
+                                        <span class="slds-page-header__title slds-truncate" title="Download Data Export">Download Data Export</span>
+                                    </h1>
+                                </div>
+                            </div><!--<p class="slds-page-header__name-meta">-</p>-->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div v-if="!currentInstanceUrl" style="padding:5em;">
+            <a href="javascript:void(0)" @click="dispatch('showOrgModal',true)">click here to login your organization.</a>
+        </div>
+        <div v-if="currentInstanceUrl">
+
+            <div class="slds-form-element">
+                <div class="slds-clearfix">
+                    <label class="slds-form-element__label" for="text-input-id-1">Login As</label>
+                </div>
+                <div class="slds-form-element__control" style="margin-top:0.1em;">
+                    <v-select :options="userSelection" v-if="userSelection.length" v-model="userExportSelection" clearSearchOnSelect="false"></v-select>
+                </div>
+            </div>
+
+            <div class="slds-form-element">
+                <div class="slds-clearfix">
+                    <label class="slds-form-element__label" for="text-input-id-2">Export to</label>
+                </div>
+                <div class="slds-form-element__control" style="margin-top:0.1em;">
+                    <input class="slds-input" type="text" id="text-input-id-2" v-model="userExportPath" />
+                </div>
+            </div>
+
+            <hr/>
+
+            <div class="slds-form-element">
+                <button class="slds-button slds-button_success" @click="dispatch('saveExportAndRun', {userExportPath,userExportSelectionId})">
+                    Save and export
+                </button>
+                <button class="slds-button slds-button_success" @click="dispatch('saveExport', {userExportPath,userExportSelectionId})">
+                    Save
+                </button>
+            </div>
+        </div>
+    </div>
+</script>
+<script>
+    Vue.component('download-dataexport-tab', {
+        template: '#download-dataexport-tab-template',
+        computed: {
+            currentInstanceUrl() {
+                return this.$store.state.currentInstanceUrl;
+            },
+            userExportPath: {
+                get() { return this.$store.state.userExportPath; },
+                set(value) { this.$store.state.userExportPath = value; },
+            },
+            userExportSelection: {
+                get() { return this.$store.state.userExportSelection; },
+                set(value) { this.$store.state.userExportSelection = value },
+            },
+            userExportSelectionId() { return (this.$store.state.userExportSelection || {}).value || ''; },
+            userSelection() { return [{ label: '<select salesforce user>', value: '' }].concat(this.$store.state.users.map(o => ({ label: o.Name + ' ' + o.Email, value: o.Id }))) },
+        },
+    });
+</script>
+
+<script type="text/x-template" id="setup-tab-template">
+    <div>
+        <div class="slds-page-header">
+            <div class="slds-page-header__row">
+                <div class="slds-page-header__col-title">
+                    <div class="slds-media">
+                        <div class="slds-media__figure">
+                            <span class="slds-icon_container slds-icon-standard-custom" title="Setup">
+                                <svg class="slds-icon slds-page-header__icon">
+                                    <use xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="/assets/icons/standard-sprite/svg/symbols.svg#custom" />
+                                </svg>
+                            </span>
+                        </div>
+                        <div class="slds-media__body">
+                            <div class="slds-page-header__name">
+                                <div class="slds-page-header__name-title">
+                                    <h1>
+                                        <span class="slds-page-header__title slds-truncate" title="Setup">Setup</span>
+                                    </h1>
+                                </div>
+                            </div><!--<p class="slds-page-header__name-meta">-</p>-->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="slds-form-element">
+            <div class="slds-clearfix">
+                <label class="slds-form-element__label" for="text-input-id-1">Org settings file path</label>
+            </div>
+            <div class="slds-form-element__control" style="margin-top:0.1em;">
+                <input class="slds-input" type="text" id="text-input-id-1" v-model="orgSettingsPath" />
+            </div>
+        </div>
+        <div class="slds-form-element">
+            <div class="slds-clearfix">
+                <label class="slds-form-element__label" for="text-input-id-2">Chrome path</label>
+            </div>
+            <div class="slds-form-element__control" id="text-input-id-2" style="margin-top:0.1em;">
+                <input class="slds-input" type="text" v-model="chromePath" />
+            </div>
+        </div>
+        <div class="slds-form-element">
+            <button class="slds-button slds-button_success" @click="dispatch('saveConfig',{orgSettingsPath,chromePath})">Save path</button>
+        </div>
+    </div>
+</script>
+<script>
+    Vue.component('setup-tab', {
+        template: '#setup-tab-template',
+        computed: {
+            orgSettingsPath: {
+                set(value) { this.dispatch('orgSettingsPath', value); },
+                get() { return this.$store.state.orgSettingsPath; }
+            },
+            chromePath: {
+                set(value) { this.dispatch('chromePath', value); },
+                get() { return this.$store.state.chromePath; }
+            }
+        },
+    });
+</script>
+
+<script type="text/x-template" id="organization-modal-template">
+    <div style="height: 640px;">
+        <section tabindex="-1" class="slds-modal slds-fade-in-open">
+            <div class="slds-modal__container">
+                <header class="slds-modal__header">
+                    <button class="slds-button slds-button_icon slds-modal__close slds-button_icon-inverse" title="Close" @click="dispatch('showOrgModal',false)">
+                        <svg class="slds-button__icon slds-button__icon_large">
+                            <use xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="/assets/icons/utility-sprite/svg/symbols.svg#close" />
+                        </svg>
+                        <span class="slds-assistive-text">Close</span>
+                    </button>
+                    <h2 id="modal-heading-01" class="slds-text-heading_medium slds-hyphenate">Manage Organizations</h2>
+                </header>
+                <div class="slds-modal__content slds-p-around_medium" id="modal-content-id-1">
+                    <div v-if="orgSettings.length">
+                        <h3>Saved Organizations</h3>
+                        <ul>
+                            <li style="margin:2em;" v-for="org in orgSettings">
+                                <div class="slds-box">
+                                    <button class="slds-button slds-button_neutral" style="width:100%;padding:1em;font-size:150%;text-align:left;margin-bottom:0.2em" @click="dispatch('attemptLogin',org)">
+                                        <button-iconleft type="standard" icon="default" class="slds-icon_large"></button-iconleft>
+                                        {{org|orgname}}
+                                    </button>
+
+                                    <button class="slds-button slds-button_neutral" @click="dispatch('removeOrg',org)">
+                                        <button-iconleft type="action" icon="remove"></button-iconleft>
+                                        Revoke Access
+                                    </button>
+
+                                    <button class="slds-button slds-button_neutral" v-if="orgHasOfflineAccess(org)" @click="dispatch('removeOfflineAccess',org)">
+                                        <button-iconleft type="action" icon="remove"></button-iconleft>
+                                        Remove Offline Access
+                                    </button>
+                                </div>
+                            </li>
+                        </ul>
+                    </div>
+                    <h3>New Organization</h3>
+                    <ul>
+                        <li style="margin:2em;">
+                            <div class="slds-box">
+                                <button class="slds-button slds-button_neutral" style="width:100%;padding:1em;font-size:150%;text-align:left" @click="dispatch('attemptLogin','login.salesforce.com')">
+                                    <button-iconleft type="standard" icon="default" class="slds-icon_large"></button-iconleft>
+                                    Production (login.salesforce.com)
+                                </button>
+                            </div>
+                        </li>
+                        <li style="margin:2em;">
+                            <div class="slds-box">
+                                <button class="slds-button slds-button_neutral" style="width:100%;padding:1em;font-size:150%;text-align:left" @click="dispatch('attemptLogin','test.salesforce.com')">
+                                    <button-iconleft type="standard" icon="default" class="slds-icon_large"></button-iconleft>
+                                    Sandbox (test.salesforce.com)
+                                </button>
+                            </div>
+                        </li>
+                        <!--<li style="margin:2em;">
+                            <div class="slds-box">
+                                <button class="slds-button slds-button_neutral" style="width:100%;padding:1em;font-size:150%;text-align:left" @click="dispatch('attemptLogin',customLoginUrl)" :disabled="!customLoginUrl">
+                                    <button-iconleft type="standard" icon="default" class="slds-icon_large"></button-iconleft>
+                                    Custom ({{customLoginUrlHint}})
+                                </button>
+                                <div class="slds-form-element">
+                                    <div class="slds-form-element__control">
+                                        <input placeholder="*.my.salesforce.com" class="slds-input" type="text" v-model="customLoginUrlInput" />
+                                    </div>
+                                </div>
+                            </div>
+                        </li>-->
+                    </ul>
+                    <hr />
+                    <div class="slds-form-element">
+                        <div class="slds-clearfix">
+                            <div class="slds-float_right">
+                                <button class="slds-button slds-button_success" @click="dispatch('setOrgSettingsPath',orgSettingsPath)">Save path</button>
+                            </div>
+                            <label class="slds-form-element__label" for="text-input-id-1">Org settings file path</label>
+                        </div>
+                        <div class="slds-form-element__control" style="margin-top:0.1em;">
+                            <input class="slds-input" type="text" id="text-input-id-1" v-model="orgSettingsPath" />
+                        </div>
+                    </div>
+                </div>
+                <footer class="slds-modal__footer">
+                    <button class="slds-button slds-button_neutral" @click="dispatch('showOrgModal',false)">Cancel</button>
+                </footer>
+            </div>
+        </section>
+        <div class="slds-backdrop slds-backdrop_open"></div>
+    </div>
+</script>
+<script>
+    Vue.component('organization-modal', {
+        template: '#organization-modal-template',
+        computed: {
+            currentInstanceUrl() { return this.$store.state.currentInstanceUrl; },
+            orgSettings() { return this.$store.state.orgSettings; },
+            orgSettingsPath: {
+                set(value) { this.dispatch('orgSettingsPath', value); },
+                get() { return this.$store.state.orgSettingsPath; }
+            },
+        },
+    });
+</script>
+
+
+
+<div id="app">
+
+    <spinner class="slds-spinner_medium" v-if="isLoading"></spinner>
+    <div class="slds-backdrop slds-backdrop_open" v-if="isLoading"></div>
+
+    <header class="slds-global-header_container">
+        <div class="slds-global-header slds-grid slds-grid_align-spread">
+            <div class="slds-global-header__item">
+                <img src="/favicon.ico" height="40" />
+            </div>
+            <div class="slds-global-header__item">
+                <ul class="slds-global-actions">
+                    <li class="slds-global-actions__item">
+                        <button class="slds-box slds-theme_default slds-global-actions__setup slds-global-actions__item-action" title="Manage Organization" @click="dispatch('showOrgModal',true)" style="padding:0.5em;">
+                            Manage Organizations
+                            <svg class="slds-button__icon slds-global-header__icon">
+                                <use xlink:href="/assets/icons/standard-sprite/svg/symbols.svg#picklist_choice"></use>
+                            </svg>
+                        </button>
+                    </li>
+                </ul>
+            </div>
+            <div class="slds-global-header__item">
+                <h1 v-if="currentInstanceUrl">
+                    <a href="javascript:void(0)"
+                       @click="dispatch('viewPage',{instanceUrl:currentInstanceUrl,url:currentInstanceUrl})">
+                        {{currentInstanceUrl|orgname}}
+                    </a>
+                </h1>
+            </div>
+            <div class="slds-global-header__item slds-global-header__item_search" style="flex-grow:1"></div>
+            <div class="slds-global-header__item" v-if="currentInstanceUrl" style="padding-right:0;">
+                <h1>
+                    <a href="javascript:void(0" @click="dispatch('showUserPopover',true)">
+                        {{userDisplayName}}{{userEmail}}
+                    </a>
+                </h1>
+            </div>
+            <div class="slds-global-header__item" v-if="currentInstanceUrl" style="padding-left:0;">
+                <div class="slds-dropdown-trigger slds-dropdown-trigger_click">
+                    <section :class="['slds-popover','slds-nubbin_top-right',showUserPopover?'':'slds-popover_hide']" role="dialog" style="position:absolute;top:3.2em;right:-0.8em;">
+                        <button class="slds-button slds-button_icon slds-button_icon-small slds-float_right slds-popover__close" title="Close dialog"
+                                @click="dispatch('showUserPopover',false)">
+                            <svg class="slds-button__icon">
+                                <use xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="/assets/icons/utility-sprite/svg/symbols.svg#close" />
+                            </svg>
+                            <span class="slds-assistive-text">Close dialog</span>
+                        </button>
+                        <div class="slds-popover__body" id="dialog-body-id-6">
+                            <div v-if="!userSelection.length" style="padding:2em">
+                                <spinner class="slds-spinner_x-small"></spinner>
+                            </div>
+                            <v-select :options="userSelection" v-if="userSelection.length" v-model="userPopoverSelection" clearSearchOnSelect="false"></v-select>
+                            <div class="slds-button-group" role="group" v-if="userSelection.length">
+                                <button class="slds-button slds-button_neutral"
+                                        @click="dispatch('loginAsUser',{instanceUrl:currentInstanceUrl,userId:userPopoverSelectionId})"
+                                        :disabled="!userPopoverSelectionId">
+                                    Login As
+                                </button>
+                                <button class="slds-button slds-button_neutral"
+                                        @click="dispatch('loginAsUserIncognito',{instanceUrl:currentInstanceUrl,userId:userPopoverSelectionId})"
+                                        :disabled="!userPopoverSelectionId">
+                                    Login As (Incognito)
+                                </button>
+                                <button class="slds-button slds-button_neutral"
+                                        @click="dispatch('viewUserPage',{instanceUrl:currentInstanceUrl,userId:userPopoverSelectionId})"
+                                        :disabled="!userPopoverSelectionId">
+                                    View
+                                </button>
+                            </div>
+                        </div>
+                    </section>
+                    <button class="slds-button slds-global-actions__avatar slds-global-actions__item-action" @click="dispatch('showUserPopover',true)">
+                        <span class="slds-avatar slds-avatar_circle slds-avatar_medium">
+                            <img alt="Person name" :src="userPhoto|empty('/assets/images/avatar2.jpg')" :title="userName" />
+                        </span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <div style="margin-top:3.5rem;">
+        <div class="slds-tabs_default">
+            <ul class="slds-tabs_default__nav" role="tablist">
+                <li :class="['slds-tabs_default__item',tab=='downloaddataexport'?'slds-is-active':'']" title="Download Data Export">
+                    <a class="slds-tabs_default__link" href="javascript:void(0);" role="tab" tabindex="0" id="tab-default-1__item" @click="dispatch('tab','downloaddataexport')">
+                        <span class="slds-tabs__left-icon">
+                            <span class="slds-icon_container slds-icon-standard-folder" title="Download Data Export">
+                                <svg class="slds-icon slds-icon_small">
+                                    <use xlink:href="/assets/icons/standard-sprite/svg/symbols.svg#folder"></use>
+                                </svg>
+                            </span>
+                        </span>Download Data Export
+                    </a>
+                </li>
+                <li :class="['slds-tabs_default__item',tab=='setup'?'slds-is-active':'']" title="Setup">
+                    <a class="slds-tabs_default__link" href="javascript:void(0);" role="tab" tabindex="0" id="tab-default-2__item" @click="dispatch('tab','setup')">
+                        <span class="slds-tabs__left-icon">
+                            <span class="slds-icon_container slds-icon-standard-custom" title="Setup">
+                                <svg class="slds-icon slds-icon_small">
+                                    <use xlink:href="/assets/icons/standard-sprite/svg/symbols.svg#custom"></use>
+                                </svg>
+                            </span>
+                        </span>Setup
+                    </a>
+                </li>
+            </ul>
+            <div id="tab-default-1" :class="['slds-tabs_default__content',tab=='downloaddataexport'?'slds-show':'slds-hide']" style="padding:1em;">
+                <download-dataexport-tab></download-dataexport-tab>
+            </div>
+            <div id="tab-default-2" :class="['slds-tabs_default__content',tab=='setup'?'slds-show':'slds-hide']" style="padding:1em;">
+                <setup-tab></setup-tab>
+            </div>
+        </div>
+    </div>
+
+    <organization-modal v-if="showOrgModal"></organization-modal>
+</div>
+<script>
+    var app = new Vue({
+        el: '#app',
+        store,
+        computed: {
+            appPage() { return this.$store.state.appPage; },
+            currentInstanceUrl() { return this.$store.state.currentInstanceUrl; },
+            isLoading() { return this.$store.state.isLoading; },
+            showOrgModal() { return this.$store.state.showOrgModal; },
+            showUserPopover() { return this.$store.state.showUserPopover; },
+            orgSettings() { return this.$store.state.orgSettings; },
+            salesforceLogoUri() { return this.$store.state.salesforceLogoUri; },
+            tab() { return this.$store.state.tab; },
+            userDisplayName() { return this.$store.state.userDisplayName; },
+            userEmail() { return this.$store.state.userEmail; },
+            userId() { return this.$store.state.userId; },
+            userName() { return this.$store.state.userName; },
+            userPhoto() { return this.$store.state.userPhoto; },
+            users() { return this.$store.state.users; },
+            userPopoverSelection: {
+                get() { return this.$store.state.userPopoverSelection; },
+                set(value) { this.$store.state.userPopoverSelection = value },
+            },
+            userPopoverSelectionId() { return (this.$store.state.userPopoverSelection || {}).value || ''; },
+            userSelection() { return [{ label: '<select salesforce user>', value: '' }].concat(this.$store.state.users.map(o => ({ label: o.Name + ' ' + o.Email, value: o.Id }))) },
+        },
+    });
+
+    dispatchSubject.next({ type: 'isLoading', payload: false });
+</script>

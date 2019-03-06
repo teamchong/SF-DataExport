@@ -3,281 +3,237 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using PuppeteerSharp;
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net;
+using System.Net.Http;
 using System.Reactive.Concurrency;
 using System.Reactive.Linq;
+using System.Reactive.Subjects;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Web;
+using Rx = System.Reactive.Linq.Observable;
+using Unit = System.Reactive.Unit;
 
 namespace SF_DataExport
 {
     public class AppDialog
     {
-        string SfLogoUri { get; set; }
-
-        ResourceHelper Resource { get; set; }
+        ResourceManager Resource { get; set; }
         JsonConfig AppSettings { get; set; }
         JsonConfig OrgSettings { get; set; }
+        AppStateManager AppState { get; set; }
+        Page Page { get; set; }
 
-
-        ConcurrentDictionary<string, DateTime> PostingUrls { get; set; }
-
-        public AppDialog(JsonConfig appSettings, JsonConfig orgSettings)
+        private AppDialog(ResourceManager resource, JsonConfig appSettings, JsonConfig orgSettings, AppStateManager appState)
         {
-            Resource = new ResourceHelper();
+            Resource = resource;
             AppSettings = appSettings;
             OrgSettings = orgSettings;
-            SfLogoUri = "data:image/x-icon;base64," + Convert.ToBase64String(Resource.GetResourceBytes("favicon.ico"));
-            PostingUrls = new ConcurrentDictionary<string, DateTime>();
+            AppState = appState;
         }
 
-        public string GetClientId(string loginUrl)
+        public static async Task<AppDialog> CreateAsync(JsonConfig appSettings, JsonConfig orgSettings, ResourceManager resource)
         {
-            if (loginUrl.Contains("login.salesforce.com"))
-                return OAuth.CLIENT_ID;
-            else
-                return OAuth.CLIENT_ID_SANDBOX;
-        }
+            var chromePath = appSettings.Get(o => o["chromePath"])?.ToString();
+            var appState = new AppStateManager(appSettings, orgSettings, resource);
+            var appDialog = new AppDialog(resource, appSettings, orgSettings, appState);
 
-        public string GetRedirectUrl(string loginUrl)
-        {
-            if (loginUrl.Contains("login.salesforce.com"))
-                return OAuth.REDIRECT_URI;
-            else
-                return OAuth.REDIRECT_URI_SANDBOX;
-        }
-
-        public Task<JToken> Alert(string message, Page page)
-        {
-            return page.EvaluateExpressionAsync("alert(" + JsonConvert.SerializeObject(message ?? "") + ")");
-        }
-
-        public Task<JToken> Confirm(string message, Page page)
-        {
-            return page.EvaluateExpressionAsync("confirm(" + JsonConvert.SerializeObject(message ?? "") + ")");
-        }
-
-        public Task<JToken> Prompt(string message, string defaultValue, Page page)
-        {
-            return page.EvaluateExpressionAsync("prompt(" + JsonConvert.SerializeObject(message ?? "") +
-                "," + JsonConvert.SerializeObject(defaultValue ?? "") + ")");
-        }
-
-        public Task<JToken> CommitAsync(JObject changes, Page page)
-        {
-            if (changes != null)
-            {
-                try
-                {
-                    var changeList = new List<string>();
-                    foreach (var c in changes.Properties().Select(p => p.Name))
-                    {
-                        changeList.Add(@"store.commit('commit'," + JsonConvert.SerializeObject(new JObject
-                        {
-                            ["name"] = c,
-                            ["value"] = changes[c]
-                        }) + ")");
-                    }
-                    return page.EvaluateExpressionAsync("try{if(typeof store!=='undefined'){" + string.Join(";", changeList) + "}}catch(_ex){}");
-                }
-                catch { }
-            }
-            return Task.FromResult<JToken>(null);
-        }
-
-        public JObject GetInitialAppState()
-        {
-            var appState = new JObject
-            {
-                ["appPage"] = "index",
-                ["attemptingDomain"] = "",
-                ["attemptLoginResult"] = null,
-                ["currentInstanceUrl"] = "",
-                ["isLoading"] = false,
-                ["orgOfflineAccess"] = new JArray(OrgSettings.List()
-                    .Where(org => !string.IsNullOrEmpty(OrgSettings.Get(o => o[org]?[OAuth.REFRESH_TOKEN]?.ToString())))),
-                ["orgOpened"] = false,
-                ["orgSettings"] = new JArray(OrgSettings.List()),
-                ["orgSettingsPath"] = OrgSettings.GetPath(),
-                ["salesforceLogoUri"] = SfLogoUri,
-            };
-            return appState;
-        }
-
-        public async Task DisplayAsync(string chromePath)
-        {
-            var appState = GetInitialAppState();
-            var closeSubject = new System.Reactive.Subjects.Subject<bool>();
-            var browser = await Puppeteer.LaunchAsync(GetLaunchOptions(chromePath));
+            var closeSubject = new Subject<bool>();
+            var browser = await Puppeteer.LaunchAsync(resource.GetLaunchOptions(chromePath));
             try
             {
                 browser.Closed += (object sender, EventArgs e) => closeSubject.OnCompleted();
-                var page = await Observable.FromAsync(() => browser.PagesAsync()).Select(p => p.Length > 0 ? p[0] : null)
-                    .SelectMany(p => Observable.FromAsync(() => SetupPageAsync(true, p, appState)));
 
-                //await page.SetContentAsync(GetPageContent(appState, datauri: false));
-                await page.GoToAsync(OAuth.REDIRECT_URI);
+                appDialog.Page = await Rx.FromAsync(() => browser.PagesAsync()).Select(p => p.Length > 0 ? p[0] : null)
+                    .SelectMany(p => Rx.FromAsync(() => appDialog.SetupPageAsync(p, true)));
+
+                appState.Subscribe(appDialog.Page);
+
+                await appDialog.Page.GoToAsync(OAuth.REDIRECT_URI);
+
                 await closeSubject.Count();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.ToString());
+                throw ex;
             }
             finally
             {
                 try { await browser?.CloseAsync(); } catch { }
                 try { if (!browser?.Process?.HasExited != true) browser?.Process?.Kill(); } catch { }
             }
+            return appDialog;
         }
 
-        async Task<Page> SetupPageAsync(bool interception, Page page, JObject appState)
+        public void PageAlert(string message)
+        {
+            Rx.FromAsync(() => Page.EvaluateFunctionAsync("alert", message ?? ""))
+                .Catch((Exception ex) => Rx.Start(() => Console.WriteLine(ex.ToString())).SelectMany(_ => Rx.Empty<JToken>()))
+                .SubscribeOn(TaskPoolScheduler.Default).Subscribe();
+        }
+
+        public void PageConfirm(string message)
+        {
+            Rx.FromAsync(() => Page.EvaluateFunctionAsync("confirm", message ?? ""))
+                .Catch((Exception ex) => Rx.Start(() => Console.WriteLine(ex.ToString())).SelectMany(_ => Rx.Empty<JToken>()))
+                .SubscribeOn(TaskPoolScheduler.Default).Subscribe();
+        }
+
+        public void PagePrompt(string message)
+        {
+            PagePrompt(message, "");
+        }
+
+        public void PagePrompt(string message, string defaultValue)
+        {
+            Rx.FromAsync(() => Page.EvaluateFunctionAsync("prompt", message ?? "", defaultValue ?? ""))
+                .Catch((Exception ex) => Rx.Start(() => Console.WriteLine(ex.ToString())).SelectMany(_ => Rx.Empty<JToken>()))
+                .SubscribeOn(TaskPoolScheduler.Default).Subscribe();
+        }
+
+        async Task<Page> SetupPageAsync(Page page, bool interception)
         {
             await Task.WhenAll(
                 page.SetRequestInterceptionAsync(interception),
                 page.SetCacheEnabledAsync(false),
                 page.SetBypassCSPAsync(true),
-                page.ExposeFunctionAsync("getState", (string name) =>
+                page.ExposeFunctionAsync("subscribeDispatch", (JArray actions) =>
                 {
-                    return appState[name];
-                }),
-                page.ExposeFunctionAsync("subscribeAction", (JObject action, JObject state) =>
-                {
-                    return SubscribeAction(action, state, page, appState);
-                }),
-                page.ExposeFunctionAsync("subscribeMutation", (JObject mutation, JObject state) =>
-                {
-                    var commits = SubscribeMutation(mutation, state, page, appState);
-                    foreach (var name in state.Properties().Select(s => s.Name))
-                    {
-                        appState[name] = state[name];
-                    }
-                    return commits;
+                    SubscribeDispatch(actions);
+                    return (JToken)null;
                 }),
                 Task.Run(() =>
                 {
                     page.Error += Page_Error;
                     page.PageError += Page_PageError;
-                    //page.Console += Page_Console;
-                    //page.Response += (object sender, ResponseCreatedEventArgs e) => Page_Response(e.Response, page, appState);
-                    page.Request += (object sender, RequestEventArgs e) => Page_Request(e.Request, page, appState);
-                    page.RequestFinished += (object sender, RequestEventArgs e) => Page_RequestFinished(e.Request, page, appState);
-                    page.RequestFailed += (object sender, RequestEventArgs e) => Page_RequestFailed(e.Request, page, appState);
-                    page.DOMContentLoaded += (object sender, EventArgs e) => Page_DOMContentLoaded(page, appState);
+                    page.Console += Page_Console;
+                    //page.Response += Page_Response;
+                    page.Request += Page_Request;
+                    page.RequestFinished += Page_RequestFinished;
+                    page.RequestFailed += Page_RequestFailed;
+                    page.DOMContentLoaded += Page_DOMContentLoaded;
                 })
             );
             return page;
         }
 
-        string GetPageContent(JObject appState, bool datauri)
+        string GetPageContent()
         {
-            return string.Join("", datauri ? "data:text/html," : "", @"<html>
-<head>
-<title>SF DataLoader</title>
-<link rel='shortcut icon' type='image/x-icon' href='", SfLogoUri, @"'>
-<style>", Resource.GetResource("slds.css"), @"</style>
-<style>[v-cloak]{display:none;}</style>
-<script>", Resource.GetResource("vue.js"), @"</script>
-<script>", Resource.GetResource("vuex.js"), @"</script>
-<script>", Resource.GetResource("rxjs.js"), @"</script>
-</head>
-<body>
-", Resource.GetResource("app.html").Replace("\"<<appState>>\"", JsonConvert.SerializeObject(appState)), @"
-</body>
-</html>");
+            var content = string.Join("", Resource.CONTENT_HTML_START, JsonConvert.SerializeObject(AppState.Value), Resource.CONTENT_HTML_END);
+            return content;
         }
 
-        void Page_Error(object sender, PuppeteerSharp.ErrorEventArgs e)
-        {
-            Console.WriteLine("Error: " + e.Error);
-        }
+        void Page_Error(object sender, PuppeteerSharp.ErrorEventArgs e) => Console.WriteLine("Error: " + e.Error);
 
-        void Page_PageError(object sender, PageErrorEventArgs e)
-        {
-            Console.WriteLine("PageError: " + e.Message);
-        }
+        void Page_PageError(object sender, PageErrorEventArgs e) => Console.WriteLine("PageError: " + e.Message);
 
         void Page_Console(object sender, ConsoleEventArgs e)
         {
-            Console.WriteLine("Console: " + e.Message);
+            Observable.FromAsync(async () =>
+            {
+                var messages = new List<string>();
+                foreach (var arg in e.Message.Args)
+                {
+                    var message = JsonConvert.SerializeObject(await arg.JsonValueAsync(), Formatting.Indented);
+                    if (!string.IsNullOrEmpty(message) && message != "null" && message != "{}") messages.Add(message);
+                }
+                Console.WriteLine(
+                "Console:" + e.Message.Type.ToString() + "\n" +
+                "URL: " + e.Message.Location.URL + "\n" +
+                "Line: " + e.Message.Location.LineNumber + "\n" +
+                "Column: " + e.Message.Location.ColumnNumber + "\n" +
+                (messages.Count > 0 ? string.Join(Environment.NewLine, messages) : ""));
+            }).SubscribeOn(TaskPoolScheduler.Default).Subscribe();
         }
 
-        void Page_Response(Response response, Page page, JObject appState)
-        {
-            page.SetRequestInterceptionAsync(true);
-            Console.WriteLine("Response: " + response.Url);
-        }
+        void Page_Response(object sender, ResponseCreatedEventArgs e) => Console.WriteLine("Response: " + e.Response.Url);
 
-        void Page_Request(Request request, Page page, JObject appState)
+        void Page_Request(object sender, RequestEventArgs e)
         {
-            switch (request.Url)
+            switch (e.Request.Url)
             {
                 case OAuth.REDIRECT_URI:
                 case OAuth.REDIRECT_URI_SANDBOX:
-                    page.SetRequestInterceptionAsync(true);
-                    appState["isLoading"] = true;
-                    PageInterception(() => request.RespondAsync(new ResponseData
+                    Rx.FromAsync(async () =>
                     {
-                        Status = System.Net.HttpStatusCode.Created,
-                        ContentType = "text/html",
-                        Body = GetPageContent(appState, datauri: false)
-                    }), page);
+                        await Page.SetRequestInterceptionAsync(true);
+                        PageInterception(() => e.Request.RespondAsync(new ResponseData
+                        {
+                            Status = HttpStatusCode.Created,
+                            ContentType = "text/html",
+                            Body = GetPageContent()
+                        }), e.Request);
+                    })
+                    .SubscribeOn(TaskPoolScheduler.Default).Subscribe();
                     break;
-                case var url when (url.StartsWith("https://login.salesforce.com/") || url.StartsWith("https://test.salesforce.com/")) && url.Contains(".salesforce.com/assets/icons/"):
-                    var icoPath = "icons/" + request.Url.Split(".salesforce.com/assets/icons/", 2).Last();
+                case var url when Resource.IsLoginUrl(url) && url.Contains(".salesforce.com/assets/icons/"):
+                    var icoPath = "icons/" + e.Request.Url.Split(".salesforce.com/assets/icons/", 2).Last();
                     var ico = Resource.GetResourceBytes(icoPath);
                     if (ico == null)
-                        PageInterception(() => request.ContinueAsync(), page);
+                        PageInterception(() => e.Request.ContinueAsync(), e.Request);
                     else
-                        PageInterception(() => request.RespondAsync(new ResponseData
+                        PageInterception(() => e.Request.RespondAsync(new ResponseData
                         {
-                            Status = System.Net.HttpStatusCode.OK,
+                            Status = HttpStatusCode.OK,
                             ContentType = Resource.GetContentType(icoPath),
                             BodyData = ico
-                        }), page);
+                        }), e.Request);
                     break;
-                case var url when (url.StartsWith("https://login.salesforce.com/") || url.StartsWith("https://test.salesforce.com/")) && url.Contains(".salesforce.com/assets/images/"):
-                    var imgPath = "images/" + request.Url.Split(".salesforce.com/assets/images/", 2).Last();
-                    var img = Resource.GetResourceBytes(imgPath);
-                    if (img == null)
-                        PageInterception(() => request.ContinueAsync(), page);
-                    else
-                        PageInterception(() => request.RespondAsync(new ResponseData
+                case var url when Resource.IsLoginUrl(url) && url.Contains(".salesforce.com/assets/images/"):
+                    var imgPath = "images/" + e.Request.Url.Split(".salesforce.com/assets/images/", 2).Last();
+                    if (imgPath == "images/favicon.ico")
+                    {
+                        PageInterception(() => e.Request.RespondAsync(new ResponseData
                         {
-                            Status = System.Net.HttpStatusCode.OK,
-                            ContentType = Resource.GetContentType(imgPath),
-                            BodyData = img
-                        }), page);
+                            Status = HttpStatusCode.OK,
+                            ContentType = "image/x-icon",
+                            BodyData = Resource.GetResourceBytes("favicon.ico")
+                        }), e.Request);
+                    }
+                    else
+                    {
+                        var img = Resource.GetResourceBytes(imgPath);
+                        if (img == null)
+                            PageInterception(() => e.Request.ContinueAsync(), e.Request);
+                        else
+                            PageInterception(() => e.Request.RespondAsync(new ResponseData
+                            {
+                                Status = HttpStatusCode.OK,
+                                ContentType = Resource.GetContentType(imgPath),
+                                BodyData = img
+                            }), e.Request);
+                    }
                     break;
-                case var url when (url.StartsWith("https://login.salesforce.com/") || url.StartsWith("https://test.salesforce.com/")) && url.Contains(".salesforce.com/services/fonts/"):
-                    var fntPath = "fonts/" + request.Url.Split(".salesforce.com/services/fonts/", 2).Last();
+                case var url when Resource.IsLoginUrl(url) && url.Contains(".salesforce.com/services/fonts/"):
+                    var fntPath = "fonts/" + e.Request.Url.Split(".salesforce.com/services/fonts/", 2).Last();
                     var fnt = Resource.GetResourceBytes(fntPath);
                     if (fnt == null)
-                        PageInterception(() => request.ContinueAsync(), page);
+                        PageInterception(() => e.Request.ContinueAsync(), e.Request);
                     else
-                        PageInterception(() => request.RespondAsync(new ResponseData
+                        PageInterception(() => e.Request.RespondAsync(new ResponseData
                         {
-                            Status = System.Net.HttpStatusCode.OK,
+                            Status = HttpStatusCode.OK,
                             ContentType = Resource.GetContentType(fntPath),
                             BodyData = fnt
-                        }), page);
+                        }), e.Request);
                     break;
                 default:
-                    //Console.WriteLine("Request " + request.Url);
-                    Observable.FromAsync(() => request.ContinueAsync())
-                    .Catch((Exception ex) => Observable.Empty<System.Reactive.Unit>())
-                    .SubscribeOn(TaskPoolScheduler.Default).Subscribe();
+                    PageInterception(() => e.Request.ContinueAsync(), e.Request);
                     break;
             }
         }
 
-        void Page_RequestFinished(Request request, Page page, JObject appState)
+        void Page_RequestFinished(object sender, RequestEventArgs e)
         {
-            switch (page.Target.Url)
+            switch (Page.Target.Url)
             {
                 case var url when url.StartsWith(OAuth.REDIRECT_URI + "#") || url.StartsWith(OAuth.REDIRECT_URI_SANDBOX + "#"):
-                    Observable.FromAsync(async () =>
+                    Rx.FromAsync(async () =>
                     {
-                        await page.SetRequestInterceptionAsync(true);
                         var tokens = HttpUtility.ParseQueryString(url.Split(new[] { '#' }, 2).Last());
                         if (tokens.Count > 0)
                         {
@@ -286,90 +242,100 @@ namespace SF_DataExport
                             {
                                 newOrg[key] = tokens[key];
                             }
-                            newOrg[OAuth.LOGIN_URL] = appState["attemptingDomain"];
+                            newOrg[OAuth.LOGIN_URL] = tokens["state"];
 
                             if (new[] { OAuth.ACCESS_TOKEN, OAuth.INSTANCE_URL }.All(s => !string.IsNullOrEmpty(newOrg[s]?.ToString())))
                             {
-                                await SetOrganizationAsync(page, appState,
-                                    newOrg[OAuth.ACCESS_TOKEN]?.ToString(),
-                                    newOrg[OAuth.INSTANCE_URL]?.ToString(),
-                                    newOrg[OAuth.LOGIN_URL]?.ToString(),
-                                    newOrg[OAuth.REFRESH_TOKEN]?.ToString());
-                                appState["orgOfflineAccess"] = new JArray(OrgSettings.List()
-                                    .Where(org => !string.IsNullOrEmpty(OrgSettings.Get(o => o[org]?[OAuth.REFRESH_TOKEN]?.ToString()))));
-                                appState["orgSettings"] = new JArray(OrgSettings.List());
-                                appState["currentInstanceUrl"] = newOrg[OAuth.INSTANCE_URL] ?? "";
+                                var client = new DNFClient(newOrg[OAuth.INSTANCE_URL]?.ToString(), newOrg[OAuth.ACCESS_TOKEN]?.ToString(), newOrg[OAuth.REFRESH_TOKEN]?.ToString());
+
+                                try
+                                {
+                                    await client.TokenRefreshAsync(new Uri(newOrg[OAuth.LOGIN_URL]?.ToString()), Resource.GetClientIdByLoginUrl(newOrg[OAuth.LOGIN_URL]?.ToString()));
+                                    await SetOrganizationAsync(
+                                        newOrg[OAuth.ACCESS_TOKEN]?.ToString(),
+                                        newOrg[OAuth.INSTANCE_URL]?.ToString(),
+                                        newOrg[OAuth.LOGIN_URL]?.ToString(),
+                                        newOrg[OAuth.ID]?.ToString(),
+                                        newOrg[OAuth.REFRESH_TOKEN]?.ToString());
+                                    AppState.Commit(AppState.GetOrgSettings());
+                                    SetCurrentInstanceUrl(client);
+                                }
+                                catch (Exception ex)
+                                {
+                                    AppState.Commit(new JObject { ["currentInstanceUrl"] = "", ["showOrgModal"] = true });
+                                    Console.WriteLine($"Login fail (REST)\n${ex.Message}");
+                                    PageAlert($"Login fail (REST)\n${ex.Message}");
+                                }
                             }
                             else if (new[] { "error", "error_description" }.All(s => !string.IsNullOrEmpty(newOrg[s]?.ToString())))
                             {
-                                appState["currentInstanceUrl"] = "";
+                                AppState.Commit(new JObject { ["currentInstanceUrl"] = "", ["showOrgModal"] = true });
                                 Console.WriteLine($"Login fail ({newOrg["error"]})\n${newOrg["error_description"]}");
+                                PageAlert($"Login fail ({newOrg["error"]})\n${newOrg["error_description"]}");
                             }
                             else
                             {
-                                appState["currentInstanceUrl"] = "";
+                                AppState.Commit(new JObject { ["currentInstanceUrl"] = "", ["showOrgModal"] = true });
                                 Console.WriteLine($"Login fail (Unknown)\n${newOrg}");
+                                PageAlert($"Login fail (Unknown)\n${newOrg}");
                             }
                         }
                         else
                         {
-                            appState["currentInstanceUrl"] = "";
+                            AppState.Commit(new JObject { ["currentInstanceUrl"] = "", ["showOrgModal"] = true });
                         }
-
-                        appState["attemptingDomain"] = "";
                     })
-                    .SelectMany(redirectUrl => Observable.FromAsync(() => page.GoToAsync(OAuth.REDIRECT_URI)))
+                    .SelectMany(redirectUrl => Rx.FromAsync(() => Page.GoToAsync(OAuth.REDIRECT_URI)))
                     .SubscribeOn(TaskPoolScheduler.Default).Subscribe();
                     break;
                 case var url when url.StartsWith(OAuth.REDIRECT_URI + "#") || url.StartsWith(OAuth.REDIRECT_URI_SANDBOX + "#")
                 || url.StartsWith(OAuth.REDIRECT_URI + "?") || url.StartsWith(OAuth.REDIRECT_URI_SANDBOX + "?"):
-                    Observable.FromAsync(() => page.GoToAsync(OAuth.REDIRECT_URI))
-                        .SelectMany(_ => Observable.FromAsync(() => page.ReloadAsync()))
+                    Rx.FromAsync(() => Page.GoToAsync(OAuth.REDIRECT_URI))
+                        .SelectMany(_ => Rx.FromAsync(() => Page.ReloadAsync()))
                         .SubscribeOn(TaskPoolScheduler.Default).Subscribe();
                     break;
-                    //default:
-                    //    Console.WriteLine("Finished " + request.Url);
-                    //    break;
             }
         }
 
-        void Page_RequestFailed(Request request, Page page, JObject appState)
+        void Page_RequestFailed(object sender, RequestEventArgs e)
         {
-            switch (page.Target.Url)
+            switch (Page.Target.Url)
             {
                 case var url when url.StartsWith(OAuth.REDIRECT_URI + "#") || url.StartsWith(OAuth.REDIRECT_URI_SANDBOX + "#")
                 || url.StartsWith(OAuth.REDIRECT_URI + "?") || url.StartsWith(OAuth.REDIRECT_URI_SANDBOX + "?"):
-                    Observable.FromAsync(() => page.GoToAsync(OAuth.REDIRECT_URI))
-                        .SelectMany(_ => Observable.FromAsync(() => page.ReloadAsync()))
+                    Rx.FromAsync(() => Page.GoToAsync(OAuth.REDIRECT_URI))
+                        .SelectMany(_ => Rx.FromAsync(() => Page.ReloadAsync()))
                         .SubscribeOn(TaskPoolScheduler.Default).Subscribe();
                     break;
-                    //default:
-                    //    Console.WriteLine("Failed " + request.Url);
-                    //    break;
             }
         }
 
-        void Page_DOMContentLoaded(Page page, JObject appState)
+        void Page_DOMContentLoaded(object sender, EventArgs e)
         {
-            //switch (page.Url)
-            //{
-            //    case OAuth.REDIRECT_URI:
-            //    case OAuth.REDIRECT_URI_SANDBOX:
-            //    case var url when url == OAuth.REDIRECT_URI + '/' || url == OAuth.REDIRECT_URI_SANDBOX + '/':
-            //        //appState["isLoading"] = true;
-            //        // break;
-            //        //default:
-            //        //    Console.WriteLine("ContentLoaded " + Page.Url);
-            //        //    break;
-            //}
+            switch (Page.Url)
+            {
+                case var url when url.Contains("/ui/setup/export/DataExportPage/d?setupid=DataManagementExport"):
+
+                    Rx.FromAsync(() => Page.XPathAsync("//tr[contains(@class,'dataRow')]"))
+                    .Select(els => els.ToObservable()).Concat()
+                    .Select(el => Rx.FromAsync(async () =>
+                    {
+                        var a = (await el.XPathAsync("//a[1]")).FirstOrDefault();
+                        var href = await a.GetPropertiesAsync();
+                        var th = (await el.XPathAsync("//th[1]")).FirstOrDefault();
+                        var filename = await th.GetPropertiesAsync();
+                        return a;
+                    })).Concat()
+                    .SubscribeOn(TaskPoolScheduler.Default).Subscribe();
+                    break;
+            }
         }
 
         async Task SetOrganizationAsync(
-            Page page,
-            JObject appState,
             string accessToken,
             string instanceUrl,
             string loginUrl,
+            string id,
             string refreshToken)
         {
             await OrgSettings.SaveAysnc(json =>
@@ -379,186 +345,343 @@ namespace SF_DataExport
                     [OAuth.ACCESS_TOKEN] = accessToken,
                     [OAuth.INSTANCE_URL] = instanceUrl,
                     [OAuth.LOGIN_URL] = loginUrl,
+                    [OAuth.ID] = id,
                     [OAuth.REFRESH_TOKEN] = refreshToken ?? "",
                 };
                 json[instanceUrl] = settingForSave;
             });
-            await CommitAsync(new JObject { ["orgSettings"] = OrgSettings.Read() }, page);
+            AppState.Commit(new JObject { ["orgSettings"] = new JArray(OrgSettings.List()) });
         }
 
-        JObject SubscribeMutation(JObject mutation, JObject state, Page page, JObject appState)
+        async Task<string> SaveOrgSettingsPathAsync(string newDirectoryPath)
         {
-            return null;
-        }
-
-        JObject SubscribeAction(JObject action, JObject state, Page page, JObject appState)
-        {
-            switch (action?["type"]?.ToString())
+            if (string.IsNullOrEmpty(newDirectoryPath))
             {
-                case "@removeOrg":
-                    Observable.FromAsync(async () =>
+                newDirectoryPath = AppContext.BaseDirectory;
+            }
+            var newFilePath = Path.Combine(newDirectoryPath, "orgsettings.json");
+
+            var oldDirectoryPath = OrgSettings.GetDirectoryPath();
+            var oldFilePath = Path.Combine(newDirectoryPath, "orgsettings.json");
+
+            if (newFilePath != oldFilePath)
+            {
+                try
+                {
+                    var orgData = OrgSettings.Read();
+                    await File.WriteAllTextAsync(newFilePath, orgData.ToString());
+                    try { File.Delete(oldFilePath); } catch { }
+                    await AppSettings.SaveAysnc(o => o["orgSettingsPath"] = newDirectoryPath);
+                    OrgSettings.SetPath(newFilePath);
+                    AppState.Commit(new JObject { ["orgSettingsPath"] = OrgSettings.GetDirectoryPath() });
+                    return null;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine(ex.ToString());
+                    return ex.Message;
+                }
+            }
+            return "No change.";
+        }
+
+        void SubscribeDispatch(JArray actions)
+        {
+            for (var i = 0; i < actions.Count; i++)
+            {
+                var action = actions[i] as JObject;
+                if (action != null)
+                {
+                    var type = action["type"]?.ToString();
+
+                    switch (type)
                     {
-                        var instanceUrl = action["payload"]?.ToString() ?? "";
-                        await OrgSettings.SaveAysnc(json =>
-                        {
-                            if (json[instanceUrl] != null)
+                        case "loginAsUser":
+                            Rx.Start(() =>
                             {
-                                json.Remove(instanceUrl);
-                            }
-                        });
-                        await CommitAsync(new JObject
-                        {
-                            ["currentInstanceUrl"] = appState["currentInstanceUrl"]?.ToString() != instanceUrl ? appState["currentInstanceUrl"] : "",
-                            ["orgOfflineAccess"] = new JArray(OrgSettings.List()
-                                .Where(org => !string.IsNullOrEmpty(OrgSettings.Get(o => o[org]?[OAuth.REFRESH_TOKEN]?.ToString())))),
-                            ["orgSettings"] = new JArray(OrgSettings.List()),
-                        }, page);
-                    }).SubscribeOn(TaskPoolScheduler.Default).Subscribe();
-                    break;
-                case "@removeOfflineAccess":
-                    Observable.FromAsync(async () =>
-                    {
-                        var instanceUrl = action["payload"]?.ToString() ?? "";
-                        await OrgSettings.SaveAysnc(json =>
-                        {
-                            if (json[instanceUrl] != null)
+                                var payload = action["payload"] as JObject;
+                                var instanceUrl = payload["instanceUrl"]?.ToString() ?? "";
+                                var userId = payload["userId"]?.ToString() ?? "";
+                                var accessToken = OrgSettings.Get(o => o[instanceUrl]?[OAuth.ACCESS_TOKEN])?.ToString() ?? "";
+                                var id = OrgSettings.Get(o => o[instanceUrl]?[OAuth.ID])?.ToString() ?? "";
+                                var url = Resource.GetLoginUrlAs(instanceUrl, id, userId, "/");
+                                var urlWithAccessCode = Resource.GetUrlViaAccessToken(instanceUrl, accessToken, url);
+                                Resource.OpenBrowser(urlWithAccessCode);
+                            }).SubscribeOn(TaskPoolScheduler.Default).Subscribe();
+                            break;
+                        case "loginAsUserIncognito":
+                            Rx.Start(() =>
                             {
-                                json[instanceUrl][OAuth.REFRESH_TOKEN] = "";
-                            }
-                        });
-                        await CommitAsync(new JObject
-                        {
-                            ["orgOfflineAccess"] = new JArray(OrgSettings.List()
-                                .Where(org => !string.IsNullOrEmpty(OrgSettings.Get(o => o[org]?[OAuth.REFRESH_TOKEN]?.ToString())))),
-                        }, page);
-                    }).SubscribeOn(TaskPoolScheduler.Default).Subscribe();
-                    break;
-                case "@changeOrgSettingsPath":
-                    Observable.FromAsync(async () =>
-                    {
-                        var newPath = action["payload"]?.ToString() ?? "";
-                        var oldPath = OrgSettings.GetPath();
-                        try
-                        {
-                            var orgData = OrgSettings.Read();
-                            await File.WriteAllTextAsync(newPath, orgData.ToString());
-                            try { File.Delete(oldPath); } catch { }
-                            OrgSettings.SetPath(newPath);
-                            await CommitAsync(new JObject { ["orgSettingsPath"] = OrgSettings.GetPath() }, page);
-                        }
-                        catch { }
-                    }).SubscribeOn(TaskPoolScheduler.Default).Subscribe();
-                    break;
-                case "@attemptLogin":
-                    Observable.FromAsync(async () =>
-                    {
-                        var attemptingDomain = Regex.Replace(action?["payload"]?.ToString() ?? "", "^https?://", "");
-                        if (!string.IsNullOrEmpty(attemptingDomain))
-                        {
-                            if (attemptingDomain != "login.salesforce.com" && attemptingDomain != "test.salesforce.com")
+                                var payload = action["payload"] as JObject;
+                                var instanceUrl = payload["instanceUrl"]?.ToString() ?? "";
+                                var userId = payload["userId"]?.ToString() ?? "";
+                                var accessToken = OrgSettings.Get(o => o[instanceUrl]?[OAuth.ACCESS_TOKEN])?.ToString() ?? "";
+                                var id = OrgSettings.Get(o => o[instanceUrl]?[OAuth.ID])?.ToString() ?? "";
+                                var url = Resource.GetLoginUrlAs(instanceUrl, id, userId, "/");
+                                var urlWithAccessCode = Resource.GetUrlViaAccessToken(instanceUrl, accessToken, url);
+                                Resource.OpenBrowserIncognito(urlWithAccessCode, AppSettings.Get(o => o["chromePath"])?.ToString());
+                            }).SubscribeOn(TaskPoolScheduler.Default).Subscribe();
+                            break;
+                        case "viewPage":
+                            Rx.Start(() =>
                             {
-                                var instanceUrl = "https://" + attemptingDomain;
-                                var savedOrg = OrgSettings.Get(o => o[instanceUrl]);
-                                if (savedOrg != null)
+                                var payload = action["payload"] as JObject;
+                                var instanceUrl = payload["instanceUrl"]?.ToString() ?? "";
+                                var url = payload["url"]?.ToString() ?? "";
+                                var accessToken = OrgSettings.Get(o => o[instanceUrl]?[OAuth.ACCESS_TOKEN])?.ToString() ?? "";
+                                var urlWithAccessCode = Resource.GetUrlViaAccessToken(instanceUrl, accessToken, url);
+                                Resource.OpenBrowser(urlWithAccessCode);
+                            }).SubscribeOn(TaskPoolScheduler.Default).Subscribe();
+                            break;
+                        case "viewUserPage":
+                            Rx.Start(() =>
+                            {
+                                var payload = action["payload"] as JObject;
+                                var instanceUrl = payload["instanceUrl"]?.ToString() ?? "";
+                                var userId = payload["userId"]?.ToString() ?? "";
+                                var accessToken = OrgSettings.Get(o => o[instanceUrl]?[OAuth.ACCESS_TOKEN])?.ToString() ?? "";
+                                var url = instanceUrl + "/" + userId + "?noredirect=1";
+                                var urlWithAccessCode = Resource.GetUrlViaAccessToken(instanceUrl, accessToken, url);
+                                Resource.OpenBrowser(urlWithAccessCode);
+                            }).SubscribeOn(TaskPoolScheduler.Default).Subscribe();
+                            break;
+                        case "downloadDataExport":
+                            Rx.FromAsync(async () =>
+                            {
+                                var instanceUrl = AppState.Value["currentInstanceUrl"]?.ToString() ?? "";
+                                var accessToken = OrgSettings.Get(o => o[instanceUrl]?[OAuth.ACCESS_TOKEN])?.ToString() ?? "";
+                                var url = Resource.GetUrlViaAccessToken(instanceUrl, accessToken, "/ui/setup/export/DataExportPage/d?setupid=DataManagementExport");
+                                await Page.GoToAsync(url);
+                            }).SubscribeOn(TaskPoolScheduler.Default).Subscribe();
+                            break;
+                        case "removeOrg":
+                            Rx.FromAsync(async () =>
+                            {
+                                var instanceUrl = action["payload"]?.ToString() ?? "";
+                                var loginUrl = OrgSettings.Get(o => o[instanceUrl][OAuth.LOGIN_URL])?.ToString() ?? "";
+                                await OrgSettings.SaveAysnc(json =>
                                 {
-                                    var accessToken = savedOrg[OAuth.ACCESS_TOKEN]?.ToString() ?? "";
-                                    var refreshToken = savedOrg[OAuth.REFRESH_TOKEN]?.ToString() ?? "";
-                                    var loginUrl = savedOrg[OAuth.LOGIN_URL]?.ToString() ?? "";
-                                    var client = new DNFClient(instanceUrl, accessToken, refreshToken);
-
-                                    if (loginUrl != "" && loginUrl != attemptingDomain)
+                                    if (json[instanceUrl] != null)
                                     {
-                                        attemptingDomain = loginUrl;
+                                        json.Remove(instanceUrl);
                                     }
-
-                                    if (refreshToken != "")
+                                });
+                                AppState.Commit(AppState.GetOrgSettings());
+                                if (AppState.Value["currentInstanceUrl"]?.ToString() == instanceUrl)
+                                {
+                                    AppState.Commit(new JObject
                                     {
-                                        try
-                                        {
-                                            await client.TokenRefreshAsync(new Uri(loginUrl), GetClientId(loginUrl));
-                                            await SetOrganizationAsync(page, appState,
-                                                client.AccessToken,
-                                                client.InstanceUrl,
-                                                loginUrl,
-                                                client.RefreshToken);
-                                            await CommitAsync(new JObject { ["currentInstanceUrl"] = client.InstanceUrl }, page);
-                                            return;
-                                        }
-                                        catch
-                                        {
-
-                                        }
+                                        ["currentInstanceUrl"] = "",
+                                        ["showOrgModal"] = true,
+                                        ["userDisplayName"] = "",
+                                        ["userEmail"] = "",
+                                        ["userId"] = "",
+                                        ["userName"] = "",
+                                        ["userPhoto"] = "",
+                                        ["userPopoverSelection"] = "",
+                                        ["users"] = new JArray()
+                                    });
+                                }
+                                var oauthPage = instanceUrl +
+                                    "/identity/app/connectedAppsUserList.apexp?app_name=SFDataExport&consumer_key=" +
+                                    HttpUtility.UrlEncode(Resource.GetClientIdByLoginUrl(loginUrl));
+                                Resource.OpenBrowser(oauthPage);
+                            }).SubscribeOn(TaskPoolScheduler.Default).Subscribe();
+                            break;
+                        case "removeOfflineAccess":
+                            Rx.FromAsync(async () =>
+                            {
+                                var instanceUrl = action["payload"]?.ToString() ?? "";
+                                await OrgSettings.SaveAysnc(json =>
+                                {
+                                    if (json[instanceUrl] != null)
+                                    {
+                                        json[instanceUrl][OAuth.REFRESH_TOKEN] = "";
                                     }
-                                    else if (accessToken != "")
+                                });
+                                AppState.Commit(new JObject
+                                {
+                                    ["orgOfflineAccess"] = new JArray(OrgSettings.List()
+                                        .Where(org => !string.IsNullOrEmpty(OrgSettings.Get(o => o[org]?[OAuth.REFRESH_TOKEN])?.ToString())))
+                                });
+                            }).SubscribeOn(TaskPoolScheduler.Default).Subscribe();
+                            break;
+                        case "saveConfig":
+                            Rx.FromAsync(async () =>
+                            {
+                                var config = action["payload"] as JObject;
+                                var chromePath = config?["chromePath"]?.ToString();
+                                var orgSettingsPath = config?["orgSettingsPath"]?.ToString();
+                                var newchromePath = config?["chromePath"]?.ToString();
+
+                                Rx.Merge(
+                                    Rx.FromAsync(() => SaveOrgSettingsPathAsync(orgSettingsPath))
+                                    .Catch((Exception ex) => Rx.Return(ex.ToString())),
+                                    Rx.FromAsync(() => AppSettings.SaveAysnc(o => o["chromePath"] = chromePath))
+                                    .Select(_ => (string)null)
+                                    .Catch((Exception ex) => Rx.Return(ex.ToString()))
+                                )
+                                .Scan(new List<string>(), (errorMessages, errorMessage) =>
+                                {
+                                    if (!string.IsNullOrEmpty(errorMessage))
                                     {
-                                        try
+                                        errorMessages.Add(errorMessage);
+                                    }
+                                    return errorMessages;
+                                })
+                                .Select(errorMessages => Rx.Start(() =>
+                                {
+                                    var message = string.Join(Environment.NewLine, errorMessages);
+                                    if (errorMessages.Count <= 0)
+                                    {
+                                        PageAlert("Save successfully.");
+                                    }
+                                    else
+                                    {
+                                        PageAlert(message);
+                                    }
+                                }))
+                                .SubscribeOn(TaskPoolScheduler.Default).Subscribe();
+                            }).SubscribeOn(TaskPoolScheduler.Default).Subscribe();
+                            break;
+                        case "setOrgSettingsPath":
+                            Rx.FromAsync(async () =>
+                            {
+                                var orgSettingsPath = action["payload"]?.ToString() ?? "";
+                                var errorMessage = await SaveOrgSettingsPathAsync(orgSettingsPath);
+                                if (errorMessage == null)
+                                {
+                                    PageAlert("Save successfully.");
+                                }
+                                else
+                                {
+                                    PageAlert("No change.");
+                                }
+                            }).SubscribeOn(TaskPoolScheduler.Default).Subscribe();
+                            break;
+                        case "attemptLogin":
+                            Rx.FromAsync(async () =>
+                            {
+                                var attemptingDomain = Regex.Replace(action["payload"]?.ToString() ?? "", "^https?://", "");
+
+                                if (!string.IsNullOrEmpty(attemptingDomain))
+                                {
+                                    var loginUrl = "https://" + attemptingDomain;
+
+                                    if (attemptingDomain != "login.salesforce.com" && attemptingDomain != "test.salesforce.com")
+                                    {
+                                        var instanceUrl = "https://" + attemptingDomain;
+                                        var savedOrg = OrgSettings.Get(o => o[instanceUrl]);
+                                        if (savedOrg != null)
                                         {
-                                            var userInfo = await client.UserInfo();
-                                            if (userInfo != null)
+                                            var accessToken = savedOrg[OAuth.ACCESS_TOKEN]?.ToString() ?? "";
+                                            var refreshToken = savedOrg[OAuth.REFRESH_TOKEN]?.ToString() ?? "";
+                                            loginUrl = savedOrg[OAuth.LOGIN_URL]?.ToString() ?? "";
+                                            if (!Uri.IsWellFormedUriString(loginUrl, UriKind.Absolute)) loginUrl = "https://login.salesforce.com";
+                                            var client = new DNFClient(instanceUrl, accessToken, refreshToken);
+
+                                            try
                                             {
+                                                await client.TokenRefreshAsync(new Uri(loginUrl), Resource.GetClientIdByLoginUrl(loginUrl));
+                                                await SetOrganizationAsync(
+                                                    client.AccessToken,
+                                                    client.InstanceUrl,
+                                                    loginUrl,
+                                                    client.Id,
+                                                    client.RefreshToken);
+                                                SetCurrentInstanceUrl(client);
                                                 return;
                                             }
+                                            catch (Exception ex)
+                                            {
+                                                Console.WriteLine(ex.ToString());
+                                                PageAlert(ex.Message);
+                                            }
                                         }
-                                        catch { }
                                     }
+
+                                    var url = loginUrl + "/services/oauth2/authorize" +
+                                        "?response_type=token" +
+                                        "&client_id=" + HttpUtility.UrlEncode(Resource.GetClientIdByLoginUrl(loginUrl)) +
+                                        "&redirect_uri=" + HttpUtility.UrlEncode(Resource.GetRedirectUrlByLoginUrl(loginUrl)) +
+                                        "&state=" + HttpUtility.UrlEncode(loginUrl) +
+                                        "&display=popup";
+                                    Rx.FromAsync(() => Page.GoToAsync(url))
+                                    .SubscribeOn(TaskPoolScheduler.Default).Subscribe();
                                 }
-                            }
-                            var url = "https://" + attemptingDomain + "/services/oauth2/authorize" +
-                                "?response_type=token" +
-                                "&client_id=" + HttpUtility.UrlEncode(GetClientId(attemptingDomain)) +
-                                "&redirect_uri=" + HttpUtility.UrlEncode(GetRedirectUrl(attemptingDomain)) +
-                                "&display=popup";
-                            PostingUrls.TryAdd(url, DateTime.Now);
-                            Observable.Concat(
-                                Observable.FromAsync(() => page.SetRequestInterceptionAsync(false)),
-                                Observable.FromAsync(() => page.GoToAsync(url)).Cast<System.Reactive.Unit>()
-                            ).SubscribeOn(TaskPoolScheduler.Default).Subscribe();
-                            await CommitAsync(new JObject
-                            {
-                                ["isLoading"] = true,
-                                ["attemptingDomain"] = attemptingDomain,
-                            }, page);
-                        }
-                    }).SubscribeOn(TaskPoolScheduler.Default).Subscribe();
-                    break;
+                            }).SubscribeOn(TaskPoolScheduler.Default).Subscribe();
+                            break;
+                        default:
+                            AppState.Commit(new JObject { [type] = action["payload"] });
+                            break;
+                    }
+                }
             }
-            return null;
         }
 
-        LaunchOptions GetLaunchOptions(string chromePath)
+        void SetCurrentInstanceUrl(DNFClient client)
         {
-            var favIcon = "<link rel='shortcut icon' type='image/x-icon' href='" + SfLogoUri + "'>";
-            var loadingPage = "data:text/html,<title>Loading SF DataLoader...</title>" + favIcon;
+            AppState.Commit(new JObject
+            {
+                ["currentInstanceUrl"] = client.InstanceUrl,
+                ["showOrgModal"] = false,
+                ["userDisplayName"] = "",
+                ["userEmail"] = "",
+                ["userId"] = "",
+                ["userName"] = "",
+                ["userPhoto"] = "",
+                ["userPopoverSelection"] = "",
+                ["users"] = new JArray()
+            });
+            Rx.Merge(
 
-            var launchOpts = new LaunchOptions();
-            launchOpts.ExecutablePath = chromePath;
-            launchOpts.Headless = false;
-            launchOpts.DefaultViewport = null;
-            launchOpts.IgnoreHTTPSErrors = true;
-            launchOpts.Args = new string[] { string.Join(" ", new [] {
-                $"--force-app-mode",
-                $"--disable-extensions",
-                $"--enable-experimental-accessibility-features",
-                $"--no-sandbox",
-                $"--disable-web-security",
-                $"--user-agent=\"SF-DataExport\"",
-                $"--enable-features=NetworkService",
-                $"--app=\"{loadingPage}\"",
-                $"--start-maximized",
-                $"--ignore-certificate-errors"
-            }) };
-            return launchOpts;
-        }
+                Rx.FromAsync(() => client.GetEnumerableAsync("SELECT Id,Name,Email FROM User WHERE IsActive=true"))
+                .Select(records => new JArray(records))
+                .SelectMany(users => Rx.If(
+                    () => AppState.Value["currentInstanceUrl"]?.ToString() == client.InstanceUrl,
+                    Rx.Start(() => AppState.Commit(new JObject { ["users"] = users })),
+                    Rx.Throw<Unit>(new InvalidOperationException())
+                ))
+                .Catch(Rx.Empty<Unit>()),
 
-        public void PageInterception(Func<Task> func, Page page)
-        {
-            Observable.FromAsync(func)
-            //.Catch((Exception ex) => Observable.Concat(
-            //    Observable.FromAsync(() => page.SetRequestInterceptionAsync(true)),
-            //    Observable.Timer(TimeSpan.FromSeconds(1)).SelectMany(_ => Observable.Throw<System.Reactive.Unit>(ex))
-            //)).Retry(3)
-            .Catch((Exception ex) => Observable.Empty<System.Reactive.Unit>())
+                Rx.FromAsync(() => client.UserInfo())
+                .SelectMany(userInfo => Rx.Merge(
+
+                    Rx.Start(() => AppState.Commit(new JObject
+                    {
+                        ["userDisplayName"] = userInfo?["display_name"],
+                        ["userEmail"] = userInfo?["email"],
+                        ["userId"] = client.Id.Split('/').Last(),
+                        ["userName"] = userInfo?["username"],
+                        ["userPopoverSelection"] = "",
+                    }))
+                    .Catch(Rx.Empty<Unit>()),
+
+                    Rx.FromAsync(() => Resource.GetDataViaAccessToken(client.InstanceUrl, client.AccessToken,
+                        userInfo?["photos"]?["thumbnail"]?.ToString(), "image/png"))
+                    .SelectMany(userPhoto =>
+                        Rx.If(
+                            () => AppState.Value["currentInstanceUrl"]?.ToString() == client.InstanceUrl,
+                            Rx.Start(() => AppState.Commit(new JObject { ["userPhoto"] = userPhoto })),
+                            Rx.Throw<Unit>(new InvalidOperationException())
+                        )
+                    )
+                ))
+
+            )
             .SubscribeOn(TaskPoolScheduler.Default).Subscribe();
         }
+
+        public void PageInterception(Func<Task> func, Request request)
+        {
+            Rx.Concat(
+                Rx.If(() => request.Method != HttpMethod.Get,
+                Rx.FromAsync(() => Page.SetRequestInterceptionAsync(false))),
+                Rx.FromAsync(func)
+            )
+            .Catch((Exception ex) => Rx.Empty<Unit>())
+            .SubscribeOn(TaskPoolScheduler.Default).Subscribe();
+        }
+
     }
 }

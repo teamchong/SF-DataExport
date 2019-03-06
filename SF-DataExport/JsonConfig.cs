@@ -10,23 +10,25 @@ namespace SF_DataExport
 {
     public class JsonConfig
     {
-        string JsonPath { get; set; }
+        string JsonFilePath { get; set; }
 
-        public JsonConfig(string jsonPath)
+        public JsonConfig(string jsonFilePath)
         {
-            JsonPath = jsonPath;
+            JsonFilePath = jsonFilePath;
         }
 
-        public string GetPath() => JsonPath;
+        public string GetFilePath() => JsonFilePath;
 
-        public void SetPath(string jsonPath) => JsonPath = jsonPath;
+        public string GetDirectoryPath() => Path.GetDirectoryName(JsonFilePath);
+
+        public void SetPath(string jsonFilePath) => JsonFilePath = jsonFilePath;
 
         public JObject Read()
         {
             var json = new JObject();
             try
             {
-                using (var stream = new FileStream(JsonPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                using (var stream = new FileStream(JsonFilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
                 {
                     using (var reader = new StreamReader(stream))
                     {
@@ -57,7 +59,7 @@ namespace SF_DataExport
         {
             var json = Read();
             setter(json);
-            await File.WriteAllTextAsync(JsonPath, json.ToString());
+            await File.WriteAllTextAsync(JsonFilePath, json.ToString());
         }
     }
 }

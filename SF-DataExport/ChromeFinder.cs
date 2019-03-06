@@ -10,11 +10,11 @@ namespace SF_DataExport
     class ChromeFinder
     {
         Regex NewLineRegex = new Regex("\\r?\\n");
-        ResourceHelper Resource {  get; set; }
+        ResourceManager Resource {  get; set; }
 
         public ChromeFinder()
         {
-            Resource = new ResourceHelper();
+            Resource = new ResourceManager();
         }
 
         public (string executablePath, string type) Find(string channel)
