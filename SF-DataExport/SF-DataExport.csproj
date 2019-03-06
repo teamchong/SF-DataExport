@@ -5,6 +5,9 @@
     <TargetFramework>netcoreapp2.2</TargetFramework>
     <RootNamespace>SF_DataExport</RootNamespace>
     <AssemblyName>sf-dataexport</AssemblyName>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <ApplicationIcon>favicon.ico</ApplicationIcon>
+    <StartupObject />
   </PropertyGroup>
 
   <ItemGroup>

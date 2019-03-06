@@ -2,6 +2,11 @@
     const { defere, from, interval, of, Subject } = rxjs;
     const { bufferTime, concat, concatMap, delayWhen, filter, ignoreElements, retryWhen, switchMap, takeWhile } = rxjs.operators;
 
+    function userSelection() {
+        return [{ label: '<select salesforce user>', value: '' }]
+            .concat(this.$store.state.users.map(o => ({ label: o.Name + ' ' + o.Email, value: o.Id })));
+    };
+
     const dispatchSubject = new Subject();
     dispatchSubject.pipe(
         bufferTime(100),
@@ -61,7 +66,6 @@
             dispatch(type, payload) { dispatchSubject.next({ type, payload }); },
             orgHasOfflineAccess(org) { return this.$store.state.orgOfflineAccess.indexOf(org) >= 0; },
             orgIsSandbox(org) { return this.$store.state.orgSandboxes.indexOf(org) >= 0; },
-            userSelection() { return [{ label: '<select salesforce user>', value: '' }].concat(this.$store.state.users.map(o => ({ label: o.Name + ' ' + o.Email, value: o.Id }))) },
         },
     });
     Vue.component('v-select', VueSelect.VueSelect);
@@ -125,7 +129,7 @@
 
             <div class="slds-form-element">
                 <div class="slds-clearfix">
-                    <label class="slds-form-element__label" for="text-input-id-1">Login As</label>
+                    <label class="slds-form-element__label" for="text-input-id-1">Login As (Blank for using current user)</label>
                 </div>
                 <div class="slds-form-element__control" style="margin-top:0.1em;">
                     <v-select :options="userSelection" v-if="userSelection.length" v-model="userExportSelectionModel" clearSearchOnSelect="false"></v-select>
@@ -144,11 +148,24 @@
             <hr/>
 
             <div class="slds-form-element">
-                <button class="slds-button slds-button_success" @click="dispatch('saveExportAndRun', {userExportPath,userExportSelection})">
-                    Save and export
-                </button>
-                <button class="slds-button slds-button_success" @click="dispatch('saveExport', {userExportPath,userExportSelection})">
-                    Save
+                <div class="slds-form-element__control slds-input-has-icon slds-input-has-icon_left-right">
+                    <svg class="slds-icon slds-input__icon slds-input__icon_left slds-icon-text-default">
+                        <use xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="/assets/icons/action-sprite/svg/symbols.svg#apex" />
+                    </svg>
+                    <input placeholder="Command line for Download Export Data" class="slds-input" type="text" v-model="cmdExport" readonly id="cmdExport-input" />
+                    <button class="slds-button slds-button_icon slds-input__icon slds-input__icon_right" title="Copy" @click="document.getElementById('cmdExport-input').select();document.execCommand('Copy')">
+                        <svg class="slds-button__icon slds-icon-text-light">
+                            <use xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="/assets/icons/utility-sprite/svg/symbols.svg#copy_to_clipboard" />
+                        </svg>
+                        <span class="slds-assistive-text">Copy</span>
+                    </button>
+                </div>
+            </div>
+
+            <hr />
+            <div class="slds-form-element">
+                <button class="slds-button slds-button_success" @click="dispatch('downloadExports', {instanceUrl:currentInstanceUrl,exportPath:userExportPath,userId:userExportSelection})">
+                    Export Now
                 </button>
             </div>
         </div>
@@ -158,9 +175,16 @@
     Vue.component('download-dataexport-tab', {
         template: '#download-dataexport-tab-template',
         computed: {
-            currentInstanceUrl() {
-                return this.$store.state.currentInstanceUrl;
+            cmdExport() {
+                var orgName = this.$store.state.currentInstanceUrl ? this.$store.state.currentInstanceUrl
+                    .replace(/^https:\/\/|\.my\.salesforce\.com$|\.salesforce\.com$/ig, '')
+                    .replace(' ', '-')
+                    .toLowerCase() : '';
+                var userId = this.userExportSelection ? " -u " + this.userExportSelection : "";
+                var exportPath = this.userExportPath ? " -e \"" + this.userExportPath + "\"" : "";
+                return this.$store.state.cmdExport + orgName + userId + exportPath;
             },
+            currentInstanceUrl() { return this.$store.state.currentInstanceUrl; },
             userExportPath: {
                 get() { return this.$store.state.userExportPath; },
                 set(value) { this.$store.state.userExportPath = value; },
@@ -171,14 +195,15 @@
                     this.$store.state.userExportSelection = (value || {}).value || '';
                 },
                 get() {
-                    for (var o of $store.state.users) {
-                        if (o.Id == this.$store.state.userExportSelection) {
-                            return { label: o.Name + ' ' + o.Email, value: o.Id };
+                    for (var o of this.userSelection) {
+                        if (o.value == this.$store.state.userExportSelection) {
+                            return o;
                         }
                     }
                     return null;
                 },
             },
+            userSelection,
         },
     });
 </script>
@@ -317,6 +342,7 @@
                     </ul>
                     <hr />
                     <div class="slds-form-element">
+                        ds
                         <div class="slds-clearfix">
                             <div class="slds-float_right">
                                 <button class="slds-button slds-button_success" @click="dispatch('setOrgSettingsPath',orgSettingsPath)">Save path</button>
@@ -491,14 +517,15 @@
                     this.$store.state.userPopoverSelection = (value || {}).value || '';
                 },
                 get() {
-                    for (var o of $store.state.users) {
-                        if (o.Id == this.$store.state.userPopoverSelection) {
-                            return { label: o.Name + ' ' + o.Email, value: o.Id };
+                    for (var o of this.userSelection) {
+                        if (o.value == this.$store.state.userPopoverSelection) {
+                            return o;
                         }
                     }
                     return null;
                 },
             },
+            userSelection,
         },
     });
 

@@ -250,30 +250,5 @@ const appState=");
                 "SF_DataExport.res.", resPath?.Replace("-sprite/", "_sprite/").Replace('/', '.')
             ));
         }
-
-        public LaunchOptions GetLaunchOptions(string chromePath)
-        {
-            var favIcon = "<link rel='shortcut icon' type='image/x-icon' href='/assets/images/favicon.ico'>";
-            var loadingPage = "data:text/html,<title>Loading SF DataLoader...</title>" + favIcon;
-
-            var launchOpts = new LaunchOptions();
-            launchOpts.ExecutablePath = chromePath;
-            launchOpts.Headless = false;
-            launchOpts.DefaultViewport = null;
-            launchOpts.IgnoreHTTPSErrors = true;
-            launchOpts.Args = new string[] { string.Join(" ", new [] {
-                $"--force-app-mode",
-                $"--disable-extensions",
-                $"--enable-experimental-accessibility-features",
-                $"--no-sandbox",
-                $"--disable-web-security",
-                $"--user-agent=\"dotnetforce\"",
-                $"--enable-features=NetworkService",
-                $"--app=\"{loadingPage}\"",
-                $"--start-maximized",
-                $"--ignore-certificate-errors"
-            }) };
-            return launchOpts;
-        }
     }
 }

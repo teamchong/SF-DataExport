@@ -44,6 +44,7 @@ namespace SF_DataExport
             State = new JObject
             {
                 ["chromePath"] = AppSettings.GetString(AppConstants.CHROME_PATH),
+                ["cmdExport"] = "dotnet " + AppDomain.CurrentDomain.FriendlyName + ".dll download@",
                 ["currentInstanceUrl"] = "",
                 ["isLoading"] = false,
                 ["showOrgModal"] = true,
@@ -55,7 +56,7 @@ namespace SF_DataExport
                 ["userId"] = "",
                 ["userName"] = "",
                 ["userPhoto"] = "",
-                ["userExportPath"] = "",
+                ["userExportPath"] = AppDomain.CurrentDomain.BaseDirectory,
                 ["userExportSelection"] = "",
                 ["userPopoverSelection"] = "",
                 ["users"] = new JArray(),
@@ -137,14 +138,20 @@ namespace SF_DataExport
                                 Resource.OpenBrowserIncognito(urlWithAccessCode, AppSettings.GetString(AppConstants.CHROME_PATH));
                             }).SubscribeOn(TaskPoolScheduler.Default).Subscribe();
                             break;
-                        case "downloadDataExport":
+                        case "downloadExports":
                             Rx.FromAsync(async () =>
                             {
                                 var payload = action["payload"] as JObject;
                                 var instanceUrl = payload["instanceUrl"]?.ToString() ?? "";
+                                var exportPath = payload["exportPath"]?.ToString() ?? "";
+                                var id = OrgSettings.Get(o => o[instanceUrl]?[OAuth.ID])?.ToString() ?? "";
+                                var userId = payload["userId"]?.ToString() ?? "";
                                 var accessToken = OrgSettings.Get(o => o[instanceUrl]?[OAuth.ACCESS_TOKEN])?.ToString() ?? "";
-                                var url = Resource.GetUrlViaAccessToken(instanceUrl, accessToken, "/ui/setup/export/DataExportPage/d?setupid=DataManagementExport");
-                                await AppPage.GoToAsync(url);
+                                var url = string.IsNullOrEmpty(userId) ?
+                                    instanceUrl + "/ui/setup/export/DataExportPage/d?setupid=DataManagementExport" :
+                                    Resource.GetLoginUrlAs(instanceUrl, id, userId, "/ui/setup/export/DataExportPage/d?setupid=DataManagementExport");
+                                var urlWithAccessCode = Resource.GetUrlViaAccessToken(instanceUrl, accessToken, url);
+                                await AppPage.GoToAsync(urlWithAccessCode);
                             }).SubscribeOn(TaskPoolScheduler.Default).Subscribe();
                             break;
                         case "removeOrg":
@@ -200,7 +207,7 @@ namespace SF_DataExport
                             }).SubscribeOn(TaskPoolScheduler.Default).Subscribe();
                             break;
                         case "saveConfig":
-                            Rx.FromAsync(async () =>
+                            Rx.Start(() =>
                             {
                                 var config = action["payload"] as JObject;
                                 var chromePath = config?[AppConstants.CHROME_PATH]?.ToString();

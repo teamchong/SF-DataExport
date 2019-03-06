@@ -22,15 +22,29 @@ namespace SF_DataExport
             foreach (var org in orgSettings.Read().Properties())
             {
                 var orgName = Regex.Replace(org.Name, @"^https://|\.my\.salesforce\.com$|\.salesforce\.com$", "", RegexOptions.IgnoreCase)
-                    .ToLower();
+                    .Replace(" ", "-").ToLower();
                 var hasOfflineAccess = !string.IsNullOrEmpty(org.Value[OAuth.REFRESH_TOKEN]?.ToString());
+
+                cliApp.Command(orgName, cliCfg =>
+                {
+                    var pathOpt = cliCfg.Option("-p", "Chrome executable path", CommandOptionType.SingleValue);
+                    var channelOpt = cliCfg.Option("-c", "Preferred Chrome Channel", CommandOptionType.SingleValue);
+                    cliCfg.OnExecute(async () =>
+                    {
+                        cliApp.ShowHelp();
+                        await InitializeAsync(appSettings, pathOpt, channelOpt);
+                        return await StartAsync(appSettings, orgSettings, org.Name, null);
+                    });
+                });
 
                 if (hasOfflineAccess)
                 {
-                    cliApp.Command(orgName + "-download", cliCfg =>
+                    cliApp.Command("download@" + orgName, cliCfg =>
                     {
-                        var pathOpt = cliApp.Option("-p", "Chrome executable path", CommandOptionType.SingleValue);
-                        var channelOpt = cliApp.Option("-c", "Preferred Chrome Channel", CommandOptionType.SingleValue);
+                        var pathOpt = cliCfg.Option("-p", "Chrome executable path", CommandOptionType.SingleValue);
+                        var channelOpt = cliCfg.Option("-c", "Preferred Chrome Channel", CommandOptionType.SingleValue);
+                        var userOpt = cliCfg.Option("-u", "Salesforce User Id", CommandOptionType.SingleValue);
+                        var exportPathOpt = cliCfg.Option("-p", "Export to path", CommandOptionType.SingleValue);
                         cliCfg.OnExecute(async () =>
                         {
                             var chromePathInConfig = appSettings.GetString(AppConstants.CHROME_PATH);
@@ -39,21 +53,13 @@ namespace SF_DataExport
                             {
                                 await appSettings.SaveAysnc(cfg => cfg[AppConstants.CHROME_PATH] = chromePath);
                             }
-                            return await DownloadDataExportAsync(chromePath);
-                        });
-                    });
-                }
-                else
-                {
-                    cliApp.Command(orgName, cliCfg =>
-                    {
-                        var pathOpt = cliApp.Option("-p", "Chrome executable path", CommandOptionType.SingleValue);
-                        var channelOpt = cliApp.Option("-c", "Preferred Chrome Channel", CommandOptionType.SingleValue);
-                        cliCfg.OnExecute(async () =>
-                        {
-                            cliApp.ShowHelp();
                             await InitializeAsync(appSettings, pathOpt, channelOpt);
-                            return await StartAsync(appSettings, orgSettings, org.Name);
+                            return await StartAsync(appSettings, orgSettings, "", new JObject
+                            {
+                                ["command"] = "download",
+                                ["userId"] = userOpt.Value(),
+                                ["exportPath"] = exportPathOpt.Value(),
+                            });
                         });
                     });
                 }
@@ -66,7 +72,7 @@ namespace SF_DataExport
                 {
                     cliApp.ShowHelp();
                     await InitializeAsync(appSettings, pathOpt, channelOpt);
-                    return await StartAsync(appSettings, orgSettings, "");
+                    return await StartAsync(appSettings, orgSettings, "", null);
                 });
             }
 
@@ -144,12 +150,7 @@ namespace SF_DataExport
             return chromePath;
         }
 
-        static async Task<int> DownloadDataExportAsync(string chromePath)
-        {
-            return 0;
-        }
-
-        static async Task<int> StartAsync(JsonConfig appSettings, JsonConfig orgSettings, string instanceUrl)
+        static async Task<int> StartAsync(JsonConfig appSettings, JsonConfig orgSettings, string instanceUrl, JObject command)
         {
             if (string.IsNullOrEmpty(appSettings.GetString(AppConstants.CHROME_PATH)))
             {
@@ -157,7 +158,7 @@ namespace SF_DataExport
                 throw new Exception("Cannot find chromium installation path, please specific the path using the -p <path> option.");
             }
 
-            await AppDialog.CreateAsync(appSettings, orgSettings, new ResourceManager(), instanceUrl);
+            await AppDialog.CreateAsync(appSettings, orgSettings, new ResourceManager(), instanceUrl, command);
             return 0;
         }
     }

@@ -37,12 +37,12 @@ namespace SF_DataExport
         }
 
         public static async Task<AppDialog> CreateAsync(JsonConfig appSettings, JsonConfig orgSettings, ResourceManager resource, 
-            string instanceUrl)
+            string instanceUrl, JObject command)
         {
             var chromePath = appSettings.GetString(AppConstants.CHROME_PATH);
 
             var closeSubject = new Subject<bool>();
-            var browser = await Puppeteer.LaunchAsync(resource.GetLaunchOptions(chromePath));
+            var browser = await Puppeteer.LaunchAsync(GetLaunchOptions(chromePath, command?["command"]?.ToString()));
             try
             {
                 browser.Closed += (object sender, EventArgs e) => closeSubject.OnCompleted();
@@ -69,6 +69,31 @@ namespace SF_DataExport
                 try { await browser?.CloseAsync(); } catch { }
                 try { if (!browser?.Process?.HasExited != true) browser?.Process?.Kill(); } catch { }
             }
+        }
+
+        static LaunchOptions GetLaunchOptions(string chromePath, string command)
+        {
+            var favIcon = "<link rel='shortcut icon' type='image/x-icon' href='/assets/images/favicon.ico'>";
+            var loadingPage = "data:text/html,<title>Loading SF DataLoader...</title>" + favIcon;
+
+            var launchOpts = new LaunchOptions();
+            launchOpts.ExecutablePath = chromePath;
+            launchOpts.Headless = !string.IsNullOrEmpty(command);
+            launchOpts.DefaultViewport = null;
+            launchOpts.IgnoreHTTPSErrors = true;
+            launchOpts.Args = new string[] { string.Join(" ", new [] {
+                $"--force-app-mode",
+                $"--disable-extensions",
+                $"--enable-experimental-accessibility-features",
+                $"--no-sandbox",
+                $"--disable-web-security",
+                $"--user-agent=\"dotnetforce\"",
+                $"--enable-features=NetworkService",
+                $"--app=\"{loadingPage}\"",
+                $"--start-maximized",
+                $"--ignore-certificate-errors"
+            }) };
+            return launchOpts;
         }
 
         async Task<Page> SetupPageAsync(Page page, bool interception)
@@ -287,13 +312,13 @@ namespace SF_DataExport
             {
                 case var url when url.Contains("/ui/setup/export/DataExportPage/d?setupid=DataManagementExport"):
 
-                    Rx.FromAsync(() => AppPage.XPathAsync("//tr[contains(@class,'dataRow')]"))
+                    Rx.FromAsync(() => AppPage.QuerySelectorAllAsync("tr.dataRow"))
                     .Select(els => els.ToObservable()).Concat()
                     .Select(el => Rx.FromAsync(async () =>
                     {
-                        var a = (await el.XPathAsync("//a[1]")).FirstOrDefault();
+                        var a = (await el.QuerySelectorAsync("a:eq(0)"));
                         var href = await a.GetPropertiesAsync();
-                        var th = (await el.XPathAsync("//th[1]")).FirstOrDefault();
+                        var th = (await el.QuerySelectorAsync("th:eq(1)"));
                         var filename = await th.GetPropertiesAsync();
                         return a;
                     })).Concat()
