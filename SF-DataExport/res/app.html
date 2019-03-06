@@ -51,7 +51,7 @@
     Vue.config.devtools = true;
     Vue.filter('orgname', (value) => {
         if (!value) return ''
-        return value.replace(/^https:\/\/|\.my\.salesforce\.com$|\.salesforce\.com$/ig, '');
+        return value.replace(/^https:\/\/|\.my\.salesforce\.com$|\.salesforce\.com$/ig, '').toUpperCase();
     });
     Vue.filter('empty', (value, emptyValue) => {
         return value || emptyValue || '';
@@ -61,6 +61,7 @@
             dispatch(type, payload) { dispatchSubject.next({ type, payload }); },
             orgHasOfflineAccess(org) { return this.$store.state.orgOfflineAccess.indexOf(org) >= 0; },
             orgIsSandbox(org) { return this.$store.state.orgSandboxes.indexOf(org) >= 0; },
+            userSelection() { return [{ label: '<select salesforce user>', value: '' }].concat(this.$store.state.users.map(o => ({ label: o.Name + ' ' + o.Email, value: o.Id }))) },
         },
     });
     Vue.component('v-select', VueSelect.VueSelect);
@@ -127,7 +128,7 @@
                     <label class="slds-form-element__label" for="text-input-id-1">Login As</label>
                 </div>
                 <div class="slds-form-element__control" style="margin-top:0.1em;">
-                    <v-select :options="userSelection" v-if="userSelection.length" v-model="userExportSelection" clearSearchOnSelect="false"></v-select>
+                    <v-select :options="userSelection" v-if="userSelection.length" v-model="userExportSelectionModel" clearSearchOnSelect="false"></v-select>
                 </div>
             </div>
 
@@ -143,10 +144,10 @@
             <hr/>
 
             <div class="slds-form-element">
-                <button class="slds-button slds-button_success" @click="dispatch('saveExportAndRun', {userExportPath,userExportSelectionId})">
+                <button class="slds-button slds-button_success" @click="dispatch('saveExportAndRun', {userExportPath,userExportSelection})">
                     Save and export
                 </button>
-                <button class="slds-button slds-button_success" @click="dispatch('saveExport', {userExportPath,userExportSelectionId})">
+                <button class="slds-button slds-button_success" @click="dispatch('saveExport', {userExportPath,userExportSelection})">
                     Save
                 </button>
             </div>
@@ -164,12 +165,20 @@
                 get() { return this.$store.state.userExportPath; },
                 set(value) { this.$store.state.userExportPath = value; },
             },
-            userExportSelection: {
-                get() { return this.$store.state.userExportSelection; },
-                set(value) { this.$store.state.userExportSelection = value },
+            userExportSelection() { return this.$store.state.userExportSelection; },
+            userExportSelectionModel: {
+                set(value) {
+                    this.$store.state.userExportSelection = (value || {}).value || '';
+                },
+                get() {
+                    for (var o of $store.state.users) {
+                        if (o.Id == this.$store.state.userExportSelection) {
+                            return { label: o.Name + ' ' + o.Email, value: o.Id };
+                        }
+                    }
+                    return null;
+                },
             },
-            userExportSelectionId() { return (this.$store.state.userExportSelection || {}).value || ''; },
-            userSelection() { return [{ label: '<select salesforce user>', value: '' }].concat(this.$store.state.users.map(o => ({ label: o.Name + ' ' + o.Email, value: o.Id }))) },
         },
     });
 </script>
@@ -256,7 +265,7 @@
                         <ul>
                             <li style="margin:2em;" v-for="org in orgSettings">
                                 <div class="slds-box">
-                                    <button class="slds-button slds-button_neutral" style="width:100%;padding:1em;font-size:150%;text-align:left;margin-bottom:0.2em" @click="dispatch('attemptLogin',org)">
+                                    <button class="slds-button slds-button_neutral slds-button_stretch" style="padding:1em;font-size:150%;text-align:left;margin-bottom:0.2em" @click="dispatch('attemptLogin',org)">
                                         <button-iconleft type="standard" icon="default" class="slds-icon_large"></button-iconleft>
                                         {{org|orgname}}
                                     </button>
@@ -395,21 +404,16 @@
                             <div v-if="!userSelection.length" style="padding:2em">
                                 <spinner class="slds-spinner_x-small"></spinner>
                             </div>
-                            <v-select :options="userSelection" v-if="userSelection.length" v-model="userPopoverSelection" clearSearchOnSelect="false"></v-select>
+                            <v-select :options="userSelection" v-if="userSelection.length" v-model="userPopoverSelectionModel" clearSearchOnSelect="false"></v-select>
                             <div class="slds-button-group" role="group" v-if="userSelection.length">
                                 <button class="slds-button slds-button_neutral"
-                                        @click="dispatch('loginAsUser',{instanceUrl:currentInstanceUrl,userId:userPopoverSelectionId})"
-                                        :disabled="!userPopoverSelectionId">
+                                        @click="dispatch('loginAsUser',{instanceUrl:currentInstanceUrl,userId:userPopoverSelection})"
+                                        :disabled="!userPopoverSelection">
                                     Login As
                                 </button>
                                 <button class="slds-button slds-button_neutral"
-                                        @click="dispatch('loginAsUserIncognito',{instanceUrl:currentInstanceUrl,userId:userPopoverSelectionId})"
-                                        :disabled="!userPopoverSelectionId">
-                                    Login As (Incognito)
-                                </button>
-                                <button class="slds-button slds-button_neutral"
-                                        @click="dispatch('viewUserPage',{instanceUrl:currentInstanceUrl,userId:userPopoverSelectionId})"
-                                        :disabled="!userPopoverSelectionId">
+                                        @click="dispatch('viewUserPage',{instanceUrl:currentInstanceUrl,userId:userPopoverSelection})"
+                                        :disabled="!userPopoverSelection">
                                     View
                                 </button>
                             </div>
@@ -481,12 +485,20 @@
             userName() { return this.$store.state.userName; },
             userPhoto() { return this.$store.state.userPhoto; },
             users() { return this.$store.state.users; },
-            userPopoverSelection: {
-                get() { return this.$store.state.userPopoverSelection; },
-                set(value) { this.$store.state.userPopoverSelection = value },
+            userPopoverSelection() { return this.$store.state.userPopoverSelection; },
+            userPopoverSelectionModel: {
+                set(value) {
+                    this.$store.state.userPopoverSelection = (value || {}).value || '';
+                },
+                get() {
+                    for (var o of $store.state.users) {
+                        if (o.Id == this.$store.state.userPopoverSelection) {
+                            return { label: o.Name + ' ' + o.Email, value: o.Id };
+                        }
+                    }
+                    return null;
+                },
             },
-            userPopoverSelectionId() { return (this.$store.state.userPopoverSelection || {}).value || ''; },
-            userSelection() { return [{ label: '<select salesforce user>', value: '' }].concat(this.$store.state.users.map(o => ({ label: o.Name + ' ' + o.Email, value: o.Id }))) },
         },
     });
 

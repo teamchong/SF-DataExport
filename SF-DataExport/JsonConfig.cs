@@ -50,6 +50,11 @@ namespace SF_DataExport
             return getter(Read());
         }
 
+        public string GetString(string name)
+        {
+            return Read()[name]?.ToString() ?? "";
+        }
+
         public Task SaveAysnc()
         {
             return SaveAysnc(obj => { });
