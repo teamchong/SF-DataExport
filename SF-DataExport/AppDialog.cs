@@ -27,15 +27,6 @@ namespace SF_DataExport
         AppStateManager AppState { get; set; }
         Page AppPage { get; set; }
 
-        private AppDialog(ResourceManager resource, JsonConfig appSettings, JsonConfig orgSettings, AppStateManager appState, Page appPage)
-        {
-            Resource = resource;
-            AppSettings = appSettings;
-            OrgSettings = orgSettings;
-            AppState = appState;
-            AppPage = appPage;
-        }
-
         public static async Task<AppDialog> CreateAsync(JsonConfig appSettings, JsonConfig orgSettings, ResourceManager resource, 
             string instanceUrl, JObject command)
         {
@@ -52,7 +43,7 @@ namespace SF_DataExport
                 appState.Value["currentInstanceUrl"] = instanceUrl;
 
                 var appDialog = new AppDialog(resource, appSettings, orgSettings, appState, appPage);
-                await appDialog.SetupPageAsync(appPage, true);
+                await appDialog.PageSetupAsync(appPage, true);
 
                 await appDialog.AppPage.GoToAsync(OAuth.REDIRECT_URI);
 
@@ -96,7 +87,16 @@ namespace SF_DataExport
             return launchOpts;
         }
 
-        async Task<Page> SetupPageAsync(Page page, bool interception)
+        private AppDialog(ResourceManager resource, JsonConfig appSettings, JsonConfig orgSettings, AppStateManager appState, Page appPage)
+        {
+            Resource = resource;
+            AppSettings = appSettings;
+            OrgSettings = orgSettings;
+            AppState = appState;
+            AppPage = appPage;
+        }
+
+        async Task<Page> PageSetupAsync(Page page, bool interception)
         {
             await Task.WhenAll(
                 page.SetRequestInterceptionAsync(interception),
@@ -120,6 +120,17 @@ namespace SF_DataExport
                 })
             );
             return page;
+        }
+
+        void PageInterception(Func<Task> func, Request request)
+        {
+            Rx.Concat(
+                Rx.If(() => request.Method != HttpMethod.Get,
+                Rx.FromAsync(() => AppPage.SetRequestInterceptionAsync(false))),
+                Rx.FromAsync(func)
+            )
+            .Catch((Exception ex) => Rx.Empty<Unit>())
+            .SubscribeOn(TaskPoolScheduler.Default).Subscribe();
         }
 
         void Page_Error(object sender, PuppeteerSharp.ErrorEventArgs e) => Console.WriteLine("Error: " + e.Error);
@@ -279,9 +290,10 @@ namespace SF_DataExport
                         {
                             AppState.Commit(new JObject { ["currentInstanceUrl"] = "", ["showOrgModal"] = true });
                         }
+                        return Resource.GetRedirectUrlByLoginUrl(url);
                     })
                     .SelectMany(redirectUrl => Rx.FromAsync(() => 
-                        AppPage.EvaluateExpressionHandleAsync("location.replace(" + JsonConvert.SerializeObject(url) + ")")))
+                        AppPage.EvaluateExpressionHandleAsync("location.replace(" + JsonConvert.SerializeObject(redirectUrl) + ")")))
                         .SubscribeOn(TaskPoolScheduler.Default).Subscribe();
                     break;
                 case var url when url.StartsWith(OAuth.REDIRECT_URI + "#") || url.StartsWith(OAuth.REDIRECT_URI_SANDBOX + "#")
@@ -325,17 +337,6 @@ namespace SF_DataExport
                     .SubscribeOn(TaskPoolScheduler.Default).Subscribe();
                     break;
             }
-        }
-
-        public void PageInterception(Func<Task> func, Request request)
-        {
-            Rx.Concat(
-                Rx.If(() => request.Method != HttpMethod.Get,
-                Rx.FromAsync(() => AppPage.SetRequestInterceptionAsync(false))),
-                Rx.FromAsync(func)
-            )
-            .Catch((Exception ex) => Rx.Empty<Unit>())
-            .SubscribeOn(TaskPoolScheduler.Default).Subscribe();
         }
 
     }

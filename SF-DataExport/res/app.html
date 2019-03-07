@@ -250,6 +250,7 @@
                 <input class="slds-input" type="text" v-model="chromePath" />
             </div>
         </div>
+        <hr/>
         <div class="slds-form-element">
             <button class="slds-button slds-button_success" @click="dispatch('saveConfig',{orgSettingsPath,chromePath})">Save path</button>
         </div>
@@ -342,7 +343,6 @@
                     </ul>
                     <hr />
                     <div class="slds-form-element">
-                        ds
                         <div class="slds-clearfix">
                             <div class="slds-float_right">
                                 <button class="slds-button slds-button_success" @click="dispatch('setOrgSettingsPath',orgSettingsPath)">Save path</button>
@@ -412,7 +412,7 @@
             <div class="slds-global-header__item" v-if="currentInstanceUrl" style="padding-right:0;">
                 <h1>
                     <a href="javascript:void(0" @click="dispatch('showUserPopover',true)">
-                        {{userDisplayName}}{{userEmail}}
+                        {{userDisplayName}} {{userEmail}}
                     </a>
                 </h1>
             </div>
