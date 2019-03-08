@@ -19,7 +19,7 @@ namespace SF_DataExport
 
         public string GetFilePath() => JsonFilePath;
 
-        public string GetDirectoryPath() => Path.GetDirectoryName(JsonFilePath);
+        public string GetDirectoryPath() => Path.GetDirectoryName(JsonFilePath).TrimEnd(Path.DirectorySeparatorChar);
 
         public void SetPath(string jsonFilePath) => JsonFilePath = jsonFilePath;
 
@@ -64,7 +64,7 @@ namespace SF_DataExport
         {
             var json = Read();
             setter(json);
-            await File.WriteAllTextAsync(JsonFilePath, json.ToString());
+            await File.WriteAllTextAsync(JsonFilePath, json.ToString()).Continue();
         }
     }
 }

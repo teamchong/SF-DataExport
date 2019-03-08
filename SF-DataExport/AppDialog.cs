@@ -27,25 +27,25 @@ namespace SF_DataExport
         AppStateManager AppState { get; set; }
         Page AppPage { get; set; }
 
-        public static async Task<AppDialog> CreateAsync(JsonConfig appSettings, JsonConfig orgSettings, ResourceManager resource, 
+        public static async Task<AppDialog> CreateAsync(JsonConfig appSettings, JsonConfig orgSettings, ResourceManager resource,
             string instanceUrl, JObject command)
         {
             var chromePath = appSettings.GetString(AppConstants.CHROME_PATH);
 
             var closeSubject = new Subject<bool>();
-            var browser = await Puppeteer.LaunchAsync(GetLaunchOptions(chromePath, command?["command"]?.ToString()));
+            var browser = await Puppeteer.LaunchAsync(GetLaunchOptions(chromePath, command?["command"]?.ToString())).Continue();
             try
             {
                 browser.Closed += (object sender, EventArgs e) => closeSubject.OnCompleted();
                 var appPage = await Rx.FromAsync(() => browser.PagesAsync()).Select(p => p.Length > 0 ? p[0] : null);
 
-                var appState = new AppStateManager(appPage , appSettings, orgSettings, resource);
+                var appState = new AppStateManager(appPage, appSettings, orgSettings, resource);
                 appState.Value["currentInstanceUrl"] = instanceUrl;
 
                 var appDialog = new AppDialog(resource, appSettings, orgSettings, appState, appPage);
-                await appDialog.PageSetupAsync(appPage, true);
-
-                await appDialog.AppPage.GoToAsync(OAuth.REDIRECT_URI);
+                await appDialog.PageSetupAsync(appPage, true).Continue();
+                
+                await appState.PageLocationReplaceAsync(OAuth.REDIRECT_URI).Continue();
 
                 await closeSubject.Count();
                 return appDialog;
@@ -72,6 +72,7 @@ namespace SF_DataExport
             launchOpts.Headless = !string.IsNullOrEmpty(command);
             launchOpts.DefaultViewport = null;
             launchOpts.IgnoreHTTPSErrors = true;
+            launchOpts.DumpIO = true;
             launchOpts.Args = new string[] { string.Join(" ", new [] {
                 $"--force-app-mode",
                 $"--disable-extensions",
@@ -104,7 +105,10 @@ namespace SF_DataExport
                 page.SetBypassCSPAsync(true),
                 page.ExposeFunctionAsync("subscribeDispatch", (JArray actions) =>
                 {
-                    AppState.SubscribeDispatch(actions);
+                    if (Resource.IsRedirectPage(page.Url))
+                    {
+                        return AppState.SubscribeDispatch(actions);
+                    }
                     return (JToken)null;
                 }),
                 Task.Run(() =>
@@ -116,9 +120,9 @@ namespace SF_DataExport
                     page.Request += Page_Request;
                     page.RequestFinished += Page_RequestFinished;
                     page.RequestFailed += Page_RequestFailed;
-                    page.DOMContentLoaded += Page_DOMContentLoaded;
+                    //page.DOMContentLoaded += Page_DOMContentLoaded;
                 })
-            );
+            ).Continue();
             return page;
         }
 
@@ -129,8 +133,7 @@ namespace SF_DataExport
                 Rx.FromAsync(() => AppPage.SetRequestInterceptionAsync(false))),
                 Rx.FromAsync(func)
             )
-            .Catch((Exception ex) => Rx.Empty<Unit>())
-            .SubscribeOn(TaskPoolScheduler.Default).Subscribe();
+            .Catch((Exception ex) => Rx.Empty<Unit>()).SubscribeTask();
         }
 
         void Page_Error(object sender, PuppeteerSharp.ErrorEventArgs e) => Console.WriteLine("Error: " + e.Error);
@@ -139,21 +142,28 @@ namespace SF_DataExport
 
         void Page_Console(object sender, ConsoleEventArgs e)
         {
-            Observable.FromAsync(async () =>
+            Rx.FromAsync(async () =>
             {
                 var messages = new List<string>();
                 foreach (var arg in e.Message.Args)
                 {
-                    var message = JsonConvert.SerializeObject(await arg.JsonValueAsync(), Formatting.Indented);
-                    if (!string.IsNullOrEmpty(message) && message != "null" && message != "{}") messages.Add(message);
+                    var message = (await arg.GetPropertyAsync("message").Continue())?.RemoteObject?.Value?.ToString();
+                    if (!string.IsNullOrEmpty(message))
+                    {
+                        messages.Add(message);
+                    }
+                    else
+                    {
+                        messages.Add(JsonConvert.SerializeObject(await arg.JsonValueAsync().Continue(), Formatting.Indented));
+                    }
                 }
                 Console.WriteLine(
-                "Console:" + e.Message.Type.ToString() + "\n" +
-                "URL: " + e.Message.Location.URL + "\n" +
-                "Line: " + e.Message.Location.LineNumber + "\n" +
-                "Column: " + e.Message.Location.ColumnNumber + "\n" +
-                (messages.Count > 0 ? string.Join(Environment.NewLine, messages) : ""));
-            }).SubscribeOn(TaskPoolScheduler.Default).Subscribe();
+                    "Console:" + e.Message.Type.ToString() + "\n" +
+                    "URL: " + e.Message.Location.URL + "\n" +
+                    "Line: " + e.Message.Location.LineNumber + "\n" +
+                    "Column: " + e.Message.Location.ColumnNumber + "\n" +
+                    (messages.Count > 0 ? string.Join(Environment.NewLine, messages) : ""));
+            }).SubscribeTask();
         }
 
         void Page_Response(object sender, ResponseCreatedEventArgs e) => Console.WriteLine("Response: " + e.Response.Url);
@@ -166,15 +176,15 @@ namespace SF_DataExport
                 case OAuth.REDIRECT_URI_SANDBOX:
                     Rx.FromAsync(async () =>
                     {
-                        await AppPage.SetRequestInterceptionAsync(true);
+                        await AppPage.SetRequestInterceptionAsync(true).Continue();
                         PageInterception(() => e.Request.RespondAsync(new ResponseData
                         {
                             Status = HttpStatusCode.Created,
                             ContentType = "text/html",
-                            Body = AppState.GetPageContent()
+                            Body = AppState.GetPageContent(),
+                            Headers = new Dictionary<string, object> { ["Cache-Control"] = "no-store" },
                         }), e.Request);
-                    })
-                    .SubscribeOn(TaskPoolScheduler.Default).Subscribe();
+                    }).SubscribeTask();
                     break;
                 case var url when Resource.IsLoginUrl(url) && url.Contains(".salesforce.com/assets/icons/"):
                     var icoPath = "icons/" + e.Request.Url.Split(".salesforce.com/assets/icons/", 2).Last();
@@ -248,7 +258,6 @@ namespace SF_DataExport
                             {
                                 newOrg[key] = tokens[key];
                             }
-                            newOrg[OAuth.LOGIN_URL] = tokens["state"];
 
                             if (new[] { OAuth.ACCESS_TOKEN, OAuth.INSTANCE_URL }.All(s => !string.IsNullOrEmpty(newOrg[s]?.ToString())))
                             {
@@ -256,13 +265,13 @@ namespace SF_DataExport
 
                                 try
                                 {
-                                    await client.TokenRefreshAsync(new Uri(newOrg[OAuth.LOGIN_URL]?.ToString()), Resource.GetClientIdByLoginUrl(newOrg[OAuth.LOGIN_URL]?.ToString()));
+                                    var loginUrl = Resource.GetLoginUrl(newOrg[OAuth.ID]);
+                                    await client.TokenRefreshAsync(new Uri(loginUrl), Resource.GetClientIdByLoginUrl(loginUrl)).Continue();
                                     await AppState.SetOrganizationAsync(
                                         newOrg[OAuth.ACCESS_TOKEN]?.ToString(),
                                         newOrg[OAuth.INSTANCE_URL]?.ToString(),
-                                        newOrg[OAuth.LOGIN_URL]?.ToString(),
                                         newOrg[OAuth.ID]?.ToString(),
-                                        newOrg[OAuth.REFRESH_TOKEN]?.ToString());
+                                        newOrg[OAuth.REFRESH_TOKEN]?.ToString()).Continue();
                                     AppState.Commit(AppState.GetOrgSettings());
                                     AppState.SetCurrentInstanceUrl(client);
                                 }
@@ -292,15 +301,11 @@ namespace SF_DataExport
                         }
                         return Resource.GetRedirectUrlByLoginUrl(url);
                     })
-                    .SelectMany(redirectUrl => Rx.FromAsync(() => 
-                        AppPage.EvaluateExpressionHandleAsync("location.replace(" + JsonConvert.SerializeObject(redirectUrl) + ")")))
-                        .SubscribeOn(TaskPoolScheduler.Default).Subscribe();
+                    .SelectMany(redirectUrl => Rx.FromAsync(() =>
+                        AppState.PageLocationReplaceAsync(redirectUrl))).SubscribeTask();
                     break;
-                case var url when url.StartsWith(OAuth.REDIRECT_URI + "#") || url.StartsWith(OAuth.REDIRECT_URI_SANDBOX + "#")
-                || url.StartsWith(OAuth.REDIRECT_URI + "?") || url.StartsWith(OAuth.REDIRECT_URI_SANDBOX + "?"):
-                    Rx.FromAsync(() => AppPage.GoToAsync(OAuth.REDIRECT_URI))
-                        .SelectMany(_ => Rx.FromAsync(() => AppPage.ReloadAsync()))
-                        .SubscribeOn(TaskPoolScheduler.Default).Subscribe();
+                case var url when url.StartsWith(OAuth.REDIRECT_URI + "?") || url.StartsWith(OAuth.REDIRECT_URI_SANDBOX + "?"):
+                    Rx.FromAsync(() => AppState.PageLocationReplaceAsync(OAuth.REDIRECT_URI)).SubscribeTask();
                     break;
             }
         }
@@ -311,32 +316,16 @@ namespace SF_DataExport
             {
                 case var url when url.StartsWith(OAuth.REDIRECT_URI + "#") || url.StartsWith(OAuth.REDIRECT_URI_SANDBOX + "#")
                 || url.StartsWith(OAuth.REDIRECT_URI + "?") || url.StartsWith(OAuth.REDIRECT_URI_SANDBOX + "?"):
-                    Rx.FromAsync(() => AppPage.GoToAsync(OAuth.REDIRECT_URI))
-                        .SelectMany(_ => Rx.FromAsync(() => AppPage.ReloadAsync()))
-                        .SubscribeOn(TaskPoolScheduler.Default).Subscribe();
+                    Rx.FromAsync(() => AppState.PageLocationReplaceAsync(OAuth.REDIRECT_URI)).SubscribeTask();
                     break;
             }
         }
 
         void Page_DOMContentLoaded(object sender, EventArgs e)
         {
-            switch (AppPage.Url)
-            {
-                case var url when url.Contains("/ui/setup/export/DataExportPage/d?setupid=DataManagementExport"):
-
-                    Rx.FromAsync(() => AppPage.QuerySelectorAllAsync("tr.dataRow"))
-                    .Select(els => els.ToObservable()).Concat()
-                    .Select(el => Rx.FromAsync(async () =>
-                    {
-                        var a = (await el.QuerySelectorAsync("a:eq(0)"));
-                        var href = await a.GetPropertiesAsync();
-                        var th = (await el.QuerySelectorAsync("th:eq(1)"));
-                        var filename = await th.GetPropertiesAsync();
-                        return a;
-                    })).Concat()
-                    .SubscribeOn(TaskPoolScheduler.Default).Subscribe();
-                    break;
-            }
+            //switch (AppPage.Url)
+            //{
+            //}
         }
 
     }

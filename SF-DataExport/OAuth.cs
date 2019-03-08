@@ -1,4 +1,6 @@
-﻿namespace SF_DataExport
+﻿using System;
+
+namespace SF_DataExport
 {
     public class OAuth
     {

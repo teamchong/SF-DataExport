@@ -28,11 +28,13 @@ namespace SF_DataExport
 <head>
 <title>Salesforce DataExport</title>
 <link rel='shortcut icon' type='image/x-icon' href='/assets/images/favicon.ico'>
+<style>", GetResource("material-icons.css"), @"</style>
+<style>", GetResource("vuetify.css"), @"</style>
 <style>", GetResource("slds.css"), @"</style>
-<style>[v-cloak]{display:none;}.v-select .dropdown-toggle .clear{display:none;}</style>
+<style>[v-cloak]{display:none;}</style>
 <script>", GetResource("vue.js"), @"</script>
 <script>", GetResource("vuex.js"), @"</script>
-<script>", GetResource("vue-select.js"), @"</script>
+<script>", GetResource("vuetify.js"), @"</script>
 <script>", GetResource("rxjs.js"), @"</script>
 </head>
 <body>
@@ -158,6 +160,18 @@ const appState=");
             return url.StartsWith("https://login.salesforce.com/") || url.StartsWith("https://test.salesforce.com/");
         }
 
+        public bool IsRedirectPage(string url)
+        {
+            switch (url)
+            {
+                case OAuth.REDIRECT_URI:
+                case OAuth.REDIRECT_URI_SANDBOX:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
         public string GetClientIdByLoginUrl(string loginUrl)
         {
             if (IsSandboxLoginUrl(loginUrl))
@@ -181,11 +195,23 @@ const appState=");
             if (match == null) return null;
             var orgId = match.Groups[1].Value;
             var usrId = match.Groups[2].Value;
-            if (DNF.ToID15(usrId) == DNF.ToID15(userId)) return url;
+            if (DNF.ToID15(usrId) == DNF.ToID15(userId))
+            {
+                return url.StartsWith('/') ? instanceUrl + url : url;
+            }
             return instanceUrl + "/servlet/servlet.su?oid=" +
                 HttpUtility.UrlEncode(orgId) + "&suorgadminid=" +
                 HttpUtility.UrlEncode(userId) + "&targetURL=" +
                 HttpUtility.UrlEncode(url);
+        }
+
+        public string GetLoginUrl(object id)
+        {
+            if (Uri.TryCreate(Convert.ToString(id), UriKind.Absolute, out var url))
+            {
+                return url.GetLeftPart(UriPartial.Authority);
+            }
+            return "https://login.salesforce.com";
         }
 
         public string GetUrlViaAccessToken(string instanceUrl, string accessToken, string targetUrl)
@@ -198,23 +224,43 @@ const appState=");
             return url;
         }
 
-        public async Task<string> GetDataViaAccessToken(string instanceUrl, string accessToken, string targetUrl, string mediaType)
+        public async Task<string> WaitForRedirectAsync(HttpClient client, string instanceUrl, string htmlContent, string targetUrl)
         {
-            if (string.IsNullOrEmpty(targetUrl)) return "";
-            var url = instanceUrl + "/secur/frontdoor.jsp?sid=" +
-                HttpUtility.UrlEncode(accessToken) +
-                "&retURL=" +
-                HttpUtility.UrlEncode(targetUrl.Replace(instanceUrl, ""));
+            var expectedUrl = targetUrl.StartsWith(instanceUrl) ? targetUrl.Substring(instanceUrl.Length) : targetUrl;
+            if (!htmlContent.Contains(expectedUrl))
+            {
+                throw new InvalidOperationException();
+            }
+            
+            htmlContent = await client.GetStringAsync(targetUrl).Continue();
+            var reg = new Regex(@"top\.window\.location\s*=\s*'([^']+)'");
+            var re = reg.Match(htmlContent);
+
+            while (re.Success)
+            {
+                var url = re.Groups[1].Value;
+                if (url.StartsWith('/'))
+                {
+                    url = instanceUrl + url;
+                }
+                htmlContent = await client.GetStringAsync(url).Continue();
+                re = reg.Match(htmlContent);
+            }
+            return htmlContent;
+        }
+
+        public async Task<string> GetDataUriViaAccessToken(string instanceUrl, string accessToken, string targetUrl, string mediaType)
+        {
+            var url = GetUrlViaAccessToken(instanceUrl, accessToken, targetUrl);
+            if (string.IsNullOrEmpty(url)) return "";
 
             var cookieContainer = new CookieContainer();
             using (var handler = new HttpClientHandler() { CookieContainer = cookieContainer })
             {
                 using (var client = new HttpClient(handler))
                 {
-                    var rpn = await client.GetAsync(url);
-                    var redirectContent = await rpn.Content.ReadAsStringAsync();
-                    if (!redirectContent.Contains(HttpUtility.JavaScriptStringEncode(targetUrl))) throw new InvalidOperationException();
-                    var bytes = await client.GetByteArrayAsync(targetUrl);
+                    var htmlContent = await client.GetStringAsync(url).Continue();
+                    var bytes = await client.GetByteArrayAsync(targetUrl).Continue();
                     return string.Join("", "data:", mediaType, ";base64," + Convert.ToBase64String(bytes));
                 }
             }

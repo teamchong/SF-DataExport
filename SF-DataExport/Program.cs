@@ -14,78 +14,86 @@ namespace SF_DataExport
     {
         static void Main(string[] args)
         {
-            var appSettings = new JsonConfig(Path.Combine(AppContext.BaseDirectory, AppConstants.APP_SETTINGS_JSON));
-            var orgSettings = new JsonConfig(Path.Combine(GetOrgPath(appSettings).orgPath, AppConstants.ORG_SETTINGS_JSON));
-
-            var cliApp = new CommandLineApplication(true);
-
-            foreach (var org in orgSettings.Read().Properties())
+            try
             {
-                var orgName = Regex.Replace(org.Name, @"^https://|\.my\.salesforce\.com$|\.salesforce\.com$", "", RegexOptions.IgnoreCase)
-                    .Replace(" ", "-").ToLower();
-                var hasOfflineAccess = !string.IsNullOrEmpty(org.Value[OAuth.REFRESH_TOKEN]?.ToString());
+                var appSettings = new JsonConfig(Path.Combine(AppContext.BaseDirectory, AppConstants.APP_SETTINGS_JSON));
+                var orgSettings = new JsonConfig(Path.Combine(GetOrgPath(appSettings).orgPath, AppConstants.ORG_SETTINGS_JSON));
 
-                cliApp.Command(orgName, cliCfg =>
-                {
-                    var pathOpt = cliCfg.Option("-p", "Chrome executable path", CommandOptionType.SingleValue);
-                    var channelOpt = cliCfg.Option("-c", "Preferred Chrome Channel", CommandOptionType.SingleValue);
-                    cliCfg.OnExecute(async () =>
-                    {
-                        cliApp.ShowHelp();
-                        await InitializeAsync(appSettings, pathOpt, channelOpt);
-                        return await StartAsync(appSettings, orgSettings, org.Name, null);
-                    });
-                });
+                var cliApp = new CommandLineApplication(false);
+                var replaceRex = new Regex( @"^https://|\.my\.salesforce\.com$|\.salesforce\.com$", RegexOptions.IgnoreCase);
 
-                if (hasOfflineAccess)
+                foreach (var org in orgSettings.Read().Properties())
                 {
-                    cliApp.Command("download@" + orgName, cliCfg =>
+                    var orgName = replaceRex.Replace(org.Name, "")
+                        .Replace(" ", "-").ToLower();
+                    var hasOfflineAccess = !string.IsNullOrEmpty(org.Value[OAuth.REFRESH_TOKEN]?.ToString());
+
+                    cliApp.Command(orgName, cliCfg =>
                     {
                         var pathOpt = cliCfg.Option("-p", "Chrome executable path", CommandOptionType.SingleValue);
                         var channelOpt = cliCfg.Option("-c", "Preferred Chrome Channel", CommandOptionType.SingleValue);
-                        var userOpt = cliCfg.Option("-u", "Salesforce User Id", CommandOptionType.SingleValue);
-                        var exportPathOpt = cliCfg.Option("-p", "Export to path", CommandOptionType.SingleValue);
                         cliCfg.OnExecute(async () =>
                         {
-                            var chromePathInConfig = appSettings.GetString(AppConstants.CHROME_PATH);
-                            var chromePath = GetChromePath(pathOpt.Value(), channelOpt.Value(), chromePathInConfig);
-                            if (!string.IsNullOrEmpty(pathOpt.Value()) && chromePathInConfig != chromePath)
-                            {
-                                await appSettings.SaveAysnc(cfg => cfg[AppConstants.CHROME_PATH] = chromePath);
-                            }
-                            await InitializeAsync(appSettings, pathOpt, channelOpt);
-                            return await StartAsync(appSettings, orgSettings, "", new JObject
-                            {
-                                ["command"] = "download",
-                                ["userId"] = userOpt.Value(),
-                                ["exportPath"] = exportPathOpt.Value(),
-                            });
+                            cliApp.ShowHelp();
+                            await InitializeAsync(appSettings, pathOpt, channelOpt).Continue();
+                            return await StartAsync(appSettings, orgSettings, org.Name, null).Continue();
                         });
                     });
+
+                    if (hasOfflineAccess)
+                    {
+                        cliApp.Command("download@" + orgName, cliCfg =>
+                        {
+                            var pathOpt = cliCfg.Option("-p", "Chrome executable path", CommandOptionType.SingleValue);
+                            var channelOpt = cliCfg.Option("-c", "Preferred Chrome Channel", CommandOptionType.SingleValue);
+                            var userOpt = cliCfg.Option("-u", "Salesforce User Id", CommandOptionType.SingleValue);
+                            var exportPathOpt = cliCfg.Option("-p", "Export to path", CommandOptionType.SingleValue);
+                            cliCfg.OnExecute(async () =>
+                            {
+                                await InitializeAsync(appSettings, pathOpt, channelOpt).Continue();
+                                return await StartAsync(appSettings, orgSettings, "", new JObject
+                                {
+                                    ["command"] = "download",
+                                    ["userId"] = userOpt.Value(),
+                                    ["exportPath"] = exportPathOpt.Value(),
+                                }).Continue();
+                            });
+                        });
+                    }
                 }
-            }
 
-            {
-                var pathOpt = cliApp.Option("-p", "Chrome executable path", CommandOptionType.SingleValue);
-                var channelOpt = cliApp.Option("-c", "Preferred Chrome Channel", CommandOptionType.SingleValue);
-                cliApp.OnExecute(async () =>
                 {
-                    cliApp.ShowHelp();
-                    await InitializeAsync(appSettings, pathOpt, channelOpt);
-                    return await StartAsync(appSettings, orgSettings, "", null);
-                });
+                    var pathOpt = cliApp.Option("-p", "Chrome executable path", CommandOptionType.SingleValue);
+                    var channelOpt = cliApp.Option("-c", "Preferred Chrome Channel", CommandOptionType.SingleValue);
+                    cliApp.OnExecute(async () =>
+                    {
+                        cliApp.ShowHelp();
+                        await InitializeAsync(appSettings, pathOpt, channelOpt).Continue();
+                        return await StartAsync(appSettings, orgSettings, "", null).Continue();
+                    });
+                }
+
+                cliApp.Execute(args);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
             }
 
-            cliApp.Execute();
+#if DEBUG
+            Console.WriteLine("Please any key to continue...");
+            Console.ReadKey();
+#endif
         }
 
         static async Task InitializeAsync(JsonConfig appSettings, CommandOption pathOpt, CommandOption channelOpt)
         {
             var chromePathInConfig = appSettings.GetString(AppConstants.CHROME_PATH);
-            var chromePath = GetChromePath(pathOpt.Value(), channelOpt.Value(), chromePathInConfig);
-            if (!string.IsNullOrEmpty(pathOpt.Value()) && chromePathInConfig != chromePath)
+            var chromePath = GetChromePath(channelOpt.Value(), pathOpt.Value(), chromePathInConfig);
+
+            if (!string.IsNullOrEmpty(chromePath) && chromePathInConfig != chromePath)
             {
-                await appSettings.SaveAysnc(cfg => cfg[AppConstants.CHROME_PATH] = chromePath);
+                await appSettings.SaveAysnc(cfg => cfg[AppConstants.CHROME_PATH] = chromePath).Continue();
             }
 
             var (orgPath, orgPathInConfig, orgPathSave) = GetOrgPath(appSettings);
@@ -98,8 +106,9 @@ namespace SF_DataExport
                         o.Remove(AppConstants.ORG_SETTINGS_PATH);
                     else
                         o[AppConstants.ORG_SETTINGS_PATH] = orgPathSave;
-                });
+                }).Continue();
             }
+            Console.WriteLine(AppConstants.APP_SETTINGS_JSON + ": " + appSettings.Read().ToString(0));
         }
 
         static (string orgPath, string orgPathInConfig, string orgPathSave) GetOrgPath(JsonConfig appSettings)
@@ -111,34 +120,20 @@ namespace SF_DataExport
             return (orgPath, orgPathInConfig, orgPathSave);
         }
 
-        //static int Launch(string executablePath, string channel, CommandLineApplication cliApp)
-        //{
-        //    var (chromePath, type) = new ChromeFinder().Find(executablePath, channel);
-        //    if (string.IsNullOrEmpty(chromePath))
-        //    {
-        //        ProcessHelper.I.OpenBrowser("https://www.google.com/chrome");
-        //        throw new Exception("Cannot find chrome installation path, please specific the path using the -p <project> option.");
-        //    }
-        //    cliApp.ShowHelp();
-        //    return 0;
-        //}
-
-        static string GetChromePath(string pathOpt, string channelOpt, string chromePathInConfig)
+        static string GetChromePath(string channelOpt, params string[] pathOpts)
         {
             var finder = new ChromeFinder();
 
-            if (!string.IsNullOrEmpty(pathOpt))
+            if (pathOpts != null)
             {
-                if (finder.CanAccess(pathOpt))
+                foreach (var pathOpt in pathOpts.Where(p => !string.IsNullOrEmpty(p)))
                 {
-                    return pathOpt;
+                    if (finder.CanAccess(pathOpt))
+                    {
+                        return pathOpt;
+                    }
+                    Console.WriteLine("Cannot access chrome at " + pathOpt);
                 }
-                throw new Exception("Cannot access chrome " + pathOpt);
-            }
-
-            if (finder.CanAccess(chromePathInConfig))
-            {
-                return chromePathInConfig;
             }
 
             var (chromePath, type) = new ChromeFinder().Find(channelOpt);
@@ -158,7 +153,7 @@ namespace SF_DataExport
                 throw new Exception("Cannot find chromium installation path, please specific the path using the -p <path> option.");
             }
 
-            await AppDialog.CreateAsync(appSettings, orgSettings, new ResourceManager(), instanceUrl, command);
+            await AppDialog.CreateAsync(appSettings, orgSettings, new ResourceManager(), instanceUrl, command).Continue();
             return 0;
         }
     }
