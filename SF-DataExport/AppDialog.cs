@@ -40,7 +40,7 @@ namespace SF_DataExport
                 var appPage = await Rx.FromAsync(() => browser.PagesAsync()).Select(p => p.Length > 0 ? p[0] : null);
 
                 var appState = new AppStateManager(appPage, appSettings, orgSettings, resource);
-                appState.Value["currentInstanceUrl"] = instanceUrl;
+                appState.Commit(new JObject { ["currentInstanceUrl"] = instanceUrl });
 
                 var appDialog = new AppDialog(resource, appSettings, orgSettings, appState, appPage);
                 await appDialog.PageSetupAsync(appPage, true).Continue();

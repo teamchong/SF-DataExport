@@ -130,11 +130,12 @@
                     <label class="slds-form-element__label" for="text-input-id-1">Login As (Leave it blank to use current user)</label>
                 </div>
                 <div class="slds-form-element__control" style="margin-top:0.1em;">
-                    <div v-if="!userItems.length" style="padding:0.9em">
-                        <spinner class="slds-spinner_x-small"></spinner>
+                    <div :style="{visibility:!userItems.length?'visible':'hidden'}">
+                        <spinner class="slds-spinner_x-small" style="top:2em"></spinner>
                     </div>
                     <v-autocomplete v-model="exportUserId" :auto-select-first="true" :items="userItems"
-                                    :clearable="true" v-if="userItems.length" placeholder="&lt;select salesforce user&gt;"></v-autocomplete>
+                                    :clearable="true" placeholder="&lt;select salesforce user&gt;"
+                                    :class="[userItems.length?'':'hidden']"></v-autocomplete>
                 </div>
             </div>
 
@@ -149,7 +150,7 @@
             </div>
 
             <div class="slds-form-element">
-                <div class="slds-form-element__control slds-input-has-icon slds-input-has-icon_left-right">
+                <div class="slds-form-element__control slds-input-has-icon slds-input-has-icon_left-right" style="background:#000;color:#fff;">
                     <svg class="slds-icon slds-input__icon slds-input__icon_left slds-icon-text-default">
                         <use xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="/assets/icons/action-sprite/svg/symbols.svg#apex" />
                     </svg>
@@ -174,11 +175,15 @@
                 </button>
             </div>
 
+
             <div v-if="exportResult">
-                {{exportResult}}
-                <pre v-for="file in exportResultFiles">
-                    {{file.name}} {{file.result}}
-                </pre>
+                <hr />
+                <pre>{{exportResult}}</pre>
+                <ul>
+                    <li v-for="file in exportResultFiles">
+                        {{file.name}}<br />{{file.result}}
+                    </li>
+                </ul>
             </div>
         </div>
     </div>
@@ -472,6 +477,15 @@
                     </h1>
                 </div>
                 <div class="slds-global-header__item slds-global-header__item_search" style="flex-grow:1"></div>
+                <div class="slds-global-header__item">
+                    <a class="slds-box slds-theme_default slds-global-actions__setup slds-global-actions__item-action"
+                       title="GitHub Page" style="padding:0.5em;" href="https://github.com/ste80/sf-dataexport" target="_blank">
+                        GitHub Page
+                        <svg class="slds-button__icon slds-global-header__icon">
+                            <use xlink:href="/assets/icons/standard-sprite/svg/symbols.svg#question_best"></use>
+                        </svg>
+                    </a>
+                </div>
                 <div class="slds-global-header__item" v-if="currentInstanceUrl" style="padding-right:0;">
                     <h1>
                         <a href="javascript:void(0" @click="dispatch('showUserPopover',true)">
@@ -490,23 +504,24 @@
                                 <span class="slds-assistive-text">Close dialog</span>
                             </button>
                             <div class="slds-popover__body" id="dialog-body-id-6">
-                                <div v-if="!userItems.length" style="padding:2em">
-                                    <spinner class="slds-spinner_x-small"></spinner>
+                                <div :style="{visibility:!userItems.length?'visible':'hidden'}">
+                                    <spinner class="slds-spinner_x-small" style="top:3em"></spinner>
                                 </div>
-                                <v-autocomplete v-model="popoverUserId" :auto-select-first="true" :items="userItems"
-                                                :clearable="true" v-if="userItems.length"
-                                                placeholder="&lt;select salesforce user&gt;"></v-autocomplete>
-                                <div class="slds-button-group" role="group" v-if="userItems.length">
-                                    <button class="slds-button slds-button_neutral"
-                                            @click="dispatch('loginAsUser',{instanceUrl:currentInstanceUrl,userId:popoverUserId})"
-                                            :disabled="!popoverUserId">
-                                        Login As
-                                    </button>
-                                    <button class="slds-button slds-button_neutral"
-                                            @click="dispatch('viewUserPage',{instanceUrl:currentInstanceUrl,userId:popoverUserId})"
-                                            :disabled="!popoverUserId">
-                                        View
-                                    </button>
+                                <div :class="[userItems.length?'':'hidden']">
+                                    <v-autocomplete v-model="popoverUserId" :auto-select-first="true" :items="userItems"
+                                                    :clearable="true" placeholder="&lt;select salesforce user&gt;"></v-autocomplete>
+                                    <div class="slds-button-group" role="group">
+                                        <button class="slds-button slds-button_neutral"
+                                                @click="dispatch('loginAsUser',{instanceUrl:currentInstanceUrl,userId:popoverUserId})"
+                                                :disabled="!popoverUserId">
+                                            Login As
+                                        </button>
+                                        <button class="slds-button slds-button_neutral"
+                                                @click="dispatch('viewUserPage',{instanceUrl:currentInstanceUrl,userId:popoverUserId})"
+                                                :disabled="!popoverUserId">
+                                            View
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         </section>

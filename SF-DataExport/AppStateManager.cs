@@ -2,6 +2,7 @@
 using HtmlAgilityPack;
 using Newtonsoft.Json.Linq;
 using PuppeteerSharp;
+using SF_DataExport.Dispatcher;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -13,6 +14,7 @@ using System.Reactive.Concurrency;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Web;
 using Rx = System.Reactive.Linq.Observable;
@@ -119,440 +121,34 @@ namespace SF_DataExport
                 if (action != null)
                 {
                     var type = action["type"]?.ToString();
-                    var payload = action["payload"] as JObject;
+                    var payload = action["payload"];
 
                     switch (type)
                     {
                         case "fetchDirPath":
-                            Rx.Start(() =>
-                            {
-                                var search = payload["search"]?.ToString()?.Trim()?.TrimEnd(Path.DirectorySeparatorChar) ?? "";
-                                var value = payload["value"]?.ToString() ?? "";
-                                var field = payload["field"]?.ToString() ?? "";
-
-                                if (search != "" && field != "")
-                                {
-                                    try
-                                    {
-                                        if (Directory.Exists(search))
-                                        {
-                                            Commit(new JObject
-                                            {
-                                                [field] = new JArray(new[] { search.TrimEnd(Path.DirectorySeparatorChar), value }.Where(s => s != "")
-                                                .Concat(Directory.GetDirectories(search)).Select(d => d.TrimEnd(Path.DirectorySeparatorChar)).Distinct())
-                                            });
-                                            return;
-                                        }
-                                        else
-                                        {
-                                            var dir = Path.GetDirectoryName(search);
-                                            if (Directory.Exists(dir))
-                                            {
-                                                Commit(new JObject
-                                                {
-                                                    [field] = new JArray(new[] { dir.TrimEnd(Path.DirectorySeparatorChar), value }.Where(s => s != "")
-                                                    .Concat(Directory.GetDirectories(dir)).Select(d => d.TrimEnd(Path.DirectorySeparatorChar)).Distinct())
-                                                });
-                                                return;
-                                            }
-                                        }
-                                    }
-                                    catch { }
-                                }
-                                Commit(new JObject { [field] = new JArray(new[] { value }.Where(s => s != "")) });
-                            })
-                            .SubscribeTask();
-                            break;
+                            return new FetchDirPath().Dispatch(payload, this);
                         case "fetchPath":
-                            Rx.Start(() =>
-                            {
-                                var search = payload["search"]?.ToString()?.Trim() ?? "";
-                                var value = payload["value"]?.ToString() ?? "";
-                                var field = payload["field"]?.ToString() ?? "";
-
-                                if (search != "" && field != "")
-                                {
-                                    try
-                                    {
-                                        if (Directory.Exists(search))
-                                        {
-                                            Commit(new JObject
-                                            {
-                                                [field] = new JArray(new[] { value }.Where(s => s != "")
-                                                    .Concat(Directory.GetFiles(search)).Distinct())
-                                            });
-                                            return;
-                                        }
-                                        else
-                                        {
-                                            var dir = Path.GetDirectoryName(search);
-                                            if (Directory.Exists(dir))
-                                            {
-                                                if (File.Exists(search))
-                                                {
-                                                    Commit(new JObject
-                                                    {
-                                                        [field] = new JArray(new[] { search, value }.Where(s => s != "")
-                                                        .Concat(Directory.GetFiles(dir)).Distinct())
-                                                    });
-                                                }
-                                                else
-                                                {
-                                                    Commit(new JObject
-                                                    {
-                                                        [field] = new JArray(new[] { value }.Where(s => s != "")
-                                                        .Concat(Directory.GetDirectories(dir)).Distinct())
-                                                    });
-                                                }
-                                                return;
-                                            }
-                                        }
-                                    }
-                                    catch { }
-                                }
-                                Commit(new JObject { [field] = new JArray(new[] { value }.Where(s => s != "")) });
-                            })
-                            .SubscribeTask();
-                            break;
+                            return new FetchPath().Dispatch(payload, this);
                         case "loginAsUser":
-                            Rx.Start(() =>
-                            {
-                                var instanceUrl = payload["instanceUrl"]?.ToString() ?? "";
-                                var userId = payload["userId"]?.ToString() ?? "";
-                                var accessToken = OrgSettings.Get(o => o[instanceUrl]?[OAuth.ACCESS_TOKEN])?.ToString() ?? "";
-                                var id = OrgSettings.Get(o => o[instanceUrl]?[OAuth.ID])?.ToString() ?? "";
-                                var targetUrl = Resource.GetLoginUrlAs(instanceUrl, id, userId, "/");
-                                var urlWithAccessCode = Resource.GetUrlViaAccessToken(instanceUrl, accessToken, targetUrl);
-                                Resource.OpenBrowserIncognito(urlWithAccessCode, AppSettings.GetString(AppConstants.CHROME_PATH));
-                            })
-                            .SubscribeTask();
-                            break;
+                            return new LoginAsUser().Dispatch(payload, this, Resource, AppSettings, OrgSettings);
                         case "viewPage":
-                            Rx.Start(() =>
-                            {
-                                var instanceUrl = payload["instanceUrl"]?.ToString() ?? "";
-                                var url = payload["url"]?.ToString() ?? "";
-                                var accessToken = OrgSettings.Get(o => o[instanceUrl]?[OAuth.ACCESS_TOKEN])?.ToString() ?? "";
-                                var urlWithAccessCode = Resource.GetUrlViaAccessToken(instanceUrl, accessToken, url);
-                                Resource.OpenBrowserIncognito(urlWithAccessCode, AppSettings.GetString(AppConstants.CHROME_PATH));
-                            })
-                            .SubscribeTask();
-                            break;
+                            return new ViewPage().Dispatch(payload, this, Resource, AppSettings, OrgSettings);
                         case "viewUserPage":
-                            Rx.Start(() =>
-                            {
-                                var instanceUrl = payload["instanceUrl"]?.ToString() ?? "";
-                                var userId = payload["userId"]?.ToString() ?? "";
-                                var accessToken = OrgSettings.Get(o => o[instanceUrl]?[OAuth.ACCESS_TOKEN])?.ToString() ?? "";
-                                var targetUrl = instanceUrl + "/" + userId + "?noredirect=1";
-                                var urlWithAccessCode = Resource.GetUrlViaAccessToken(instanceUrl, accessToken, targetUrl);
-                                Resource.OpenBrowserIncognito(urlWithAccessCode, AppSettings.GetString(AppConstants.CHROME_PATH));
-                            })
-                            .SubscribeTask();
-                            break;
+                            return new ViewUserPage().Dispatch(payload, this, Resource, AppSettings, OrgSettings);
                         case "viewDownloadExports":
-                            Rx.Start(() =>
-                            {
-                                var exportPath = payload["exportPath"]?.ToString() ?? "";
-                                var instanceUrl = payload["instanceUrl"]?.ToString() ?? "";
-                                var userId = payload["userId"]?.ToString() ?? "";
-
-                                var id = OrgSettings.Get(o => o[instanceUrl]?[OAuth.ID])?.ToString() ?? "";
-                                var accessToken = OrgSettings.Get(o => o[instanceUrl]?[OAuth.ACCESS_TOKEN])?.ToString() ?? "";
-                                var redirectUri = Resource.GetRedirectUrlByLoginUrl(id);
-                                var targeturl = string.IsNullOrEmpty(userId) ?
-                                    instanceUrl + "/ui/setup/export/DataExportPage/d?setupid=DataManagementExport" :
-                                    Resource.GetLoginUrlAs(instanceUrl, id, userId,
-                                    "/ui/setup/export/DataExportPage/d?setupid=DataManagementExport");
-                                var urlWithAccessCode = Resource.GetUrlViaAccessToken(instanceUrl, accessToken, targeturl);
-                                Resource.OpenBrowserIncognito(urlWithAccessCode, AppSettings.GetString(AppConstants.CHROME_PATH));
-                            })
-                            .SubscribeTask();
-                            break;
+                            return new ViewDownloadExports().Dispatch(payload, this, Resource, AppSettings, OrgSettings);
                         case "downloadExports":
-                            Rx.FromAsync(async () =>
-                            {
-                                var exportPath = payload["exportPath"]?.ToString() ?? "";
-                                var instanceUrl = payload["instanceUrl"]?.ToString() ?? "";
-                                var userId = payload["userId"]?.ToString() ?? "";
-
-                                var id = OrgSettings.Get(o => o[instanceUrl]?[OAuth.ID])?.ToString() ?? "";
-                                var accessToken = OrgSettings.Get(o => o[instanceUrl]?[OAuth.ACCESS_TOKEN])?.ToString() ?? "";
-                                var redirectUri = Resource.GetRedirectUrlByLoginUrl(id);
-                                var targetPage = "/ui/setup/export/DataExportPage/d";
-                                var targetUrl = string.IsNullOrEmpty(userId) ?
-                                    instanceUrl + targetPage :
-                                    Resource.GetLoginUrlAs(instanceUrl, id, userId, targetPage);
-                                var exportResult = new System.Text.StringBuilder();
-                                exportResult.Append("Loading page ").AppendLine(targetPage);
-                                var exportResultFiles = new JObject();
-                                Commit(new JObject { ["exportResult"] = exportResult.ToString(), ["exportResultFiles"] = exportResultFiles });
-
-                                try
-                                {
-                                    var cookieContainer = new CookieContainer();
-                                    using (var handler = new HttpClientHandler() { CookieContainer = cookieContainer })
-                                    {
-                                        using (var client = new HttpClient(handler))
-                                        {
-                                            client.Timeout = TimeSpan.FromHours(2);
-                                            var url = Resource.GetUrlViaAccessToken(instanceUrl, accessToken, targetUrl);
-                                            var htmlContent = await client.GetStringAsync(url).Continue();
-                                            htmlContent = await Resource.WaitForRedirectAsync(client, instanceUrl, htmlContent, targetUrl).Continue();
-
-                                            var doc = new HtmlDocument();
-                                            doc.LoadHtml(htmlContent);
-
-                                            var subject = new List<(string fileName, string fileUrl)>();
-                                            var links = doc.DocumentNode.SelectNodes(@"//a[contains(@href,"".ZIP"")]");
-
-                                            if (links?.Count > 0)
-                                            {
-                                                var validHref = new Regex(@"/servlet/servlet.OrgExport\?fileName=(.+\.ZIP)", RegexOptions.IgnoreCase);
-
-                                                foreach (var link in links)
-                                                {
-                                                    var href = HttpUtility.HtmlDecode(link.GetAttributeValue("href", ""));
-                                                    var match = validHref.Match(href);
-                                                    var filename = match?.Groups[1]?.Value;
-                                                    if (!string.IsNullOrEmpty(filename))
-                                                    {
-                                                        if (href.StartsWith('/')) href = instanceUrl + href;
-                                                        subject.Add((HttpUtility.UrlDecode(filename), href));
-                                                        exportResultFiles[href] = "Pending...";
-                                                        Commit(new JObject { ["exportResultFiles"] = exportResultFiles });
-                                                    }
-                                                }
-
-                                                Console.WriteLine(subject.Count + " files found for download.");
-                                                await PageLocationReplaceAsync(redirectUri).Continue();
-
-                                                client.DefaultRequestHeaders.Add("Referer", instanceUrl + targetPage);
-
-                                                exportResult.Append("Found ").Append(subject.Count).AppendLine(" files.");
-                                                Commit(new JObject { ["exportResult"] = exportResult.ToString() });
-
-                                                if (subject.Count > 0)
-                                                {
-                                                    var totalSize = await subject.ToObservable().Select(link =>
-                                                    {
-                                                        var (filename, fileUrl) = link;
-                                                        return Rx.FromAsync(async () =>
-                                                        {
-                                                            exportResultFiles[fileUrl] = "Downloading...";
-                                                            Commit(new JObject { ["exportResultFiles"] = exportResultFiles });
-                                                            var outFile = Path.Combine(exportPath, filename);
-
-                                                            using (var inStream = await client.GetStreamAsync(fileUrl).Continue())
-                                                            {
-                                                                using (var outStream = new FileStream(outFile, FileMode.Create, FileAccess.Write, FileShare.None))
-                                                                {
-                                                                    await inStream.CopyToAsync(outStream).Continue();
-                                                                }
-                                                            }
-
-                                                            using (var zip = ZipFile.OpenRead(outFile))
-                                                            {
-                                                                exportResultFiles[fileUrl] = "Done. " + GetDisplaySize(outFile);
-                                                                Commit(new JObject { ["exportResultFiles"] = exportResultFiles });
-                                                                return outFile;
-                                                            }
-                                                        })
-                                                        .Catch((Exception ex) => Rx.Defer(() =>
-                                                        {
-                                                            exportResultFiles[fileUrl] = ex.ToString();
-                                                            Commit(new JObject { ["exportResultFiles"] = exportResultFiles });
-                                                            return Rx.Throw<string>(ex);
-                                                        }));
-                                                    })
-                                                    .Retry(3)
-                                                    .Merge(10)
-                                                    .Count();
-
-                                                    exportResult.Append("Export completed");
-                                                    Commit(new JObject { ["exportResult"] = exportResult.ToString(), ["exportResultFiles"] = exportResultFiles });
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                                catch (Exception ex)
-                                {
-                                    PageAlert(ex.Message);
-                                }
-                                finally
-                                {
-                                    Commit(new JObject { ["isLoading"] = false });
-                                }
-                            })
-                            .SubscribeTask();
-                            break;
+                            return new DownloadExports().Dispatch(payload, this, Resource, OrgSettings);
                         case "removeOrg":
-                            Rx.FromAsync(async () =>
-                            {
-                                var instanceUrl = action["payload"]?.ToString() ?? "";
-                                var loginUrl = Resource.GetLoginUrl(OrgSettings.Get(o => o[instanceUrl][OAuth.ID]));
-                                await OrgSettings.SaveAysnc(json =>
-                                    {
-                                        if (json[instanceUrl] != null)
-                                        {
-                                            json.Remove(instanceUrl);
-                                        }
-                                    }).Continue();
-                                Commit(GetOrgSettings());
-                                if (State["currentInstanceUrl"]?.ToString() == instanceUrl)
-                                {
-                                    Commit(new JObject
-                                    {
-                                        ["currentInstanceUrl"] = "",
-                                        ["exportUserId"] = "",
-                                        ["popoverUserId"] = "",
-                                        ["showOrgModal"] = true,
-                                        ["userDisplayName"] = "",
-                                        ["userEmail"] = "",
-                                        ["userId"] = "",
-                                        ["userName"] = "",
-                                        ["userPhoto"] = "",
-                                        ["users"] = new JArray()
-                                    });
-                                }
-                                var oauthPage = instanceUrl +
-                                    "/identity/app/connectedAppsUserList.apexp?app_name=SFDataExport&consumer_key=" +
-                                    HttpUtility.UrlEncode(Resource.GetClientIdByLoginUrl(loginUrl));
-                                Resource.OpenBrowserIncognito(oauthPage, AppSettings.GetString(AppConstants.CHROME_PATH));
-                            })
-                            .SubscribeTask();
-                            break;
+                            return new RemoveOrg().Dispatch(payload, this, Resource, AppSettings, OrgSettings);
                         case "removeOfflineAccess":
-                            Rx.FromAsync(async () =>
-                            {
-                                var instanceUrl = action["payload"]?.ToString() ?? "";
-                                await OrgSettings.SaveAysnc(json =>
-                                {
-                                    if (json[instanceUrl] != null)
-                                    {
-                                        json[instanceUrl][OAuth.REFRESH_TOKEN] = "";
-                                    }
-                                }).Continue();
-                                Commit(new JObject
-                                {
-                                    ["orgOfflineAccess"] = new JArray(OrgSettings.List()
-                                    .Where(org => !string.IsNullOrEmpty(OrgSettings.Get(o => o[org]?[OAuth.REFRESH_TOKEN])?.ToString())))
-                                });
-                            })
-                            .SubscribeTask();
-                            break;
+                            return new RemoveOfflineAccess().Dispatch(payload, this, OrgSettings);
                         case "saveConfig":
-                            Rx.Start(() =>
-                            {
-                                var config = action["payload"] as JObject;
-                                var chromePath = config?[AppConstants.CHROME_PATH]?.ToString();
-                                var orgSettingsPath = config?[AppConstants.ORG_SETTINGS_PATH]?.ToString();
-                                var newchromePath = config?[AppConstants.CHROME_PATH]?.ToString();
-
-                                Rx.Merge(
-                                    Rx.FromAsync(() => SaveOrgSettingsPathAsync(orgSettingsPath))
-                                        .Catch((Exception ex) => Rx.Return(ex.ToString())),
-                                        Rx.FromAsync(() => AppSettings.SaveAysnc(o => o[AppConstants.CHROME_PATH] = chromePath))
-                                        .Select(_ => (string)null)
-                                        .Catch((Exception ex) => Rx.Return(ex.ToString()))
-                                    )
-                                    .Scan(new List<string>(), (errorMessages, errorMessage) =>
-                                    {
-                                        if (!string.IsNullOrEmpty(errorMessage))
-                                        {
-                                            errorMessages.Add(errorMessage);
-                                        }
-                                        return errorMessages;
-                                    })
-                                    .Select(errorMessages => Rx.Start(() =>
-                                    {
-                                        var message = string.Join(Environment.NewLine, errorMessages);
-                                        if (errorMessages.Count <= 0)
-                                        {
-                                            PageAlert("Save successfully.");
-                                        }
-                                        else
-                                        {
-                                            PageAlert(message);
-                                        }
-                                    }))
-                                    .SubscribeTask();
-                            })
-                            .SubscribeTask();
-                            break;
+                            return new SaveConfig().Dispatch(payload, this, AppSettings, OrgSettings);
                         case "setOrgSettingsPath":
-                            Rx.FromAsync(async () =>
-                            {
-                                var orgSettingsPath = action["payload"]?.ToString() ?? "";
-                                var errorMessage = await SaveOrgSettingsPathAsync(orgSettingsPath).Continue();
-                                if (errorMessage == null)
-                                {
-                                    PageAlert("Save successfully.");
-                                }
-                                else
-                                {
-                                    PageAlert("No change.");
-                                }
-                            })
-                            .SubscribeTask();
-                            break;
+                            return new SetOrgSettingsPath().Dispatch(payload, this);
                         case "attemptLogin":
-                            Rx.FromAsync(async () =>
-                            {
-                                var attemptingDomain = Regex.Replace(action["payload"]?.ToString() ?? "", "^https?://", "");
-
-                                if (!string.IsNullOrEmpty(attemptingDomain))
-                                {
-                                    var loginUrl = "https://" + attemptingDomain;
-
-                                    if (attemptingDomain != "login.salesforce.com" && attemptingDomain != "test.salesforce.com")
-                                    {
-                                        var instanceUrl = "https://" + attemptingDomain;
-                                        var savedOrg = OrgSettings.Get(o => o[instanceUrl]);
-                                        if (savedOrg != null)
-                                        {
-                                            var accessToken = savedOrg[OAuth.ACCESS_TOKEN]?.ToString() ?? "";
-                                            var refreshToken = savedOrg[OAuth.REFRESH_TOKEN]?.ToString() ?? "";
-                                            loginUrl = Resource.GetLoginUrl(savedOrg[OAuth.ID]);
-                                            if (!Uri.IsWellFormedUriString(loginUrl, UriKind.Absolute))
-                                            {
-                                                loginUrl = "https://login.salesforce.com";
-                                            }
-                                            var client = new DNFClient(instanceUrl, accessToken, refreshToken);
-
-                                            try
-                                            {
-                                                await client.TokenRefreshAsync(new Uri(loginUrl), Resource.GetClientIdByLoginUrl(loginUrl))
-                                                    .Continue();
-                                                await SetOrganizationAsync(
-                                                    client.AccessToken,
-                                                    client.InstanceUrl,
-                                                    client.Id,
-                                                    client.RefreshToken)
-                                                    .Continue();
-                                                SetCurrentInstanceUrl(client);
-                                                return;
-                                            }
-                                            catch (Exception ex)
-                                            {
-                                                Console.WriteLine(ex.ToString());
-                                                PageAlert(ex.Message);
-                                            }
-                                        }
-                                    }
-
-                                    var targetUrl = loginUrl + "/services/oauth2/authorize" +
-                                        "?response_type=token" +
-                                        "&client_id=" + HttpUtility.UrlEncode(Resource.GetClientIdByLoginUrl(loginUrl)) +
-                                        "&redirect_uri=" + HttpUtility.UrlEncode(Resource.GetRedirectUrlByLoginUrl(loginUrl)) +
-                                        "&state=" + HttpUtility.UrlEncode(loginUrl) +
-                                        "&display=popup";
-                                    await PageRedirectAsync(targetUrl).Continue();
-                                }
-                            })
-                            .SubscribeTask();
-                            break;
+                            return new AttemptLogin().Dispatch(payload, this, Resource, OrgSettings);
                         default:
                             Commit(new JObject { [type] = action["payload"] });
                             break;
@@ -560,23 +156,6 @@ namespace SF_DataExport
                 }
             }
             return (JToken)null;
-        }
-
-        public string GetDisplaySize(string filename)
-        {
-            var sizes = new string[] { "B", "KB", "MB", "GB", "TB" };
-            var len = new FileInfo(filename).Length;
-            int order = 0;
-            while (len >= 1024 && order < sizes.Length - 1)
-            {
-                order++;
-                len = len / 1024;
-            }
-
-            // Adjust the format string to your preferences. For example "{0:0.#}{1}" would
-            // show a single decimal place, and no space.
-            var result = String.Format("{0:0.##} {1}", len, sizes[order]);
-            return result;
         }
 
         public void Subscribe()
@@ -616,20 +195,30 @@ namespace SF_DataExport
             };
         }
 
+        SemaphoreSlim Throttler = new SemaphoreSlim(1, 1);
+
         public void Commit(JObject newState)
         {
-            if (newState != null)
+            Observable.FromAsync(async () =>
             {
-                try
+                if (newState != null)
                 {
-                    State.Merge(newState, MergeSettings);
-                    CommitSubject.OnNext(newState);
+                    try
+                    {
+                        await Throttler.WaitAsync().Continue();
+                        State.Merge(newState, MergeSettings);
+                        CommitSubject.OnNext(newState);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine(ex.ToString());
+                    }
+                    finally
+                    {
+                        Throttler.Release();
+                    }
                 }
-                catch (Exception ex)
-                {
-                    Console.WriteLine(ex.ToString());
-                }
-            }
+            }).SubscribeOn(CurrentThreadScheduler.Instance).Subscribe();
         }
 
         public void SetCurrentInstanceUrl(DNFClient client)
