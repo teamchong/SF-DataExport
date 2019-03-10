@@ -32,7 +32,12 @@ namespace SF_DataExport
         {
             var chromePath = appSettings.GetString(AppConstants.PATH_CHROME);
 
-            var appState = new AppStateManager(appSettings, orgSettings, resource, command);
+            var appState = new AppStateManager(appSettings, orgSettings, resource);
+            var exist = await appState.ProcessCommandAsync(command);
+            if (exist)
+            {
+                return null;
+            }
             //appState.Commit(new JObject { ["currentInstanceUrl"] = instanceUrl });
             var browser = await Puppeteer.LaunchAsync(GetLaunchOptions(chromePath, (string)command?["command"])).GoOn();
 

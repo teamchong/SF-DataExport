@@ -109,6 +109,7 @@ namespace SF_DataExport.Dispatcher
                                                 using (var zip = ZipFile.OpenRead(outFile))
                                                 {
                                                     var fileSize = new FileInfo(filename).Length;
+                                                    Console.WriteLine("Skipped... " + fileUrl);
                                                     exportResultFiles[fileUrl] = "Skipped..." + resource.GetDisplaySize(fileSize);
                                                     appState.Commit(new JObject { ["exportResultFiles"] = exportResultFiles });
                                                     return Observable.Return(fileSize);
@@ -118,6 +119,7 @@ namespace SF_DataExport.Dispatcher
                                         catch { }
                                         return Observable.FromAsync(async () =>
                                         {
+                                            Console.WriteLine("Downloading..." + fileUrl);
                                             exportResultFiles[fileUrl] = "Downloading...";
                                             appState.Commit(new JObject { ["exportResultFiles"] = exportResultFiles });
 
@@ -135,6 +137,7 @@ namespace SF_DataExport.Dispatcher
                                             using (var zip = ZipFile.OpenRead(outFile))
                                             {
                                                 var fileSize = new FileInfo(filename).Length;
+                                                Console.WriteLine("Downloaded... " + fileUrl);
                                                 exportResultFiles[fileUrl] = "Downloaded..." + resource.GetDisplaySize(fileSize);
                                                 appState.Commit(new JObject { ["exportResultFiles"] = exportResultFiles });
                                                 return fileSize;
@@ -142,6 +145,7 @@ namespace SF_DataExport.Dispatcher
                                         })
                                         .Catch((Exception ex) => Observable.Defer(() =>
                                         {
+                                            Console.WriteLine("Trying... " + fileUrl);
                                             exportResultFiles[fileUrl] = "Trying...." + ex.ToString();
                                             appState.Commit(new JObject { ["exportResultFiles"] = exportResultFiles });
                                             return Observable.Throw<long>(ex);
@@ -149,6 +153,7 @@ namespace SF_DataExport.Dispatcher
                                         .Retry(3)
                                         .Catch((Exception ex) => Observable.Defer(() =>
                                         {
+                                            Console.WriteLine("Failed... " + fileUrl);
                                             exportResultFiles[fileUrl] = "Failed...(" + (++tryCount) + ") " + ex.ToString();
                                             appState.Commit(new JObject { ["exportResultFiles"] = exportResultFiles });
                                             return Observable.Return(0L);

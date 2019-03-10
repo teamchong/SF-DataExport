@@ -35,19 +35,17 @@ namespace SF_DataExport
         JsonConfig AppSettings { get; set; }
         JsonConfig OrgSettings { get; set; }
         ResourceManager Resource { get; set; }
-        JObject Command { get; set; }
 
         JObject State { get; set; }
         Subject<JObject> CommitSubject = new Subject<JObject>();
 
         public JObject Value { get => State; }
 
-        public AppStateManager(JsonConfig appSettings, JsonConfig orgSettings, ResourceManager resource, JObject command)
+        public AppStateManager(JsonConfig appSettings, JsonConfig orgSettings, ResourceManager resource)
         {
             AppSettings = appSettings;
             OrgSettings = orgSettings;
             Resource = resource;
-            Command = command;
             State = new JObject
             {
                 ["alertMessage"] = "",
@@ -79,17 +77,16 @@ namespace SF_DataExport
                 ["users"] = new JArray(),
             };
             State.Merge(GetOrgSettings(), MergeSettings);
-            ProcessCommand(command);
         }
 
-        public void ProcessCommand(JObject command)
+        public async Task<bool> ProcessCommandAsync(JObject command)
         {
-            if (command == null) return;
+            if (command == null) return false;
 
             switch ((string)command?["command"])
             {
                 case AppConstants.COMMAND_DOWNLOAD:
-                    Observable.Merge(
+                    await Observable.Merge(
                         Observable.Start(() => new DownloadExports().Dispatch(command, this, Resource, OrgSettings)).Select(_ => 0L),
                         Observable.Start(() =>
                         {
@@ -109,10 +106,10 @@ namespace SF_DataExport
                         .Catch((EndOfStreamException ex) => Observable.Empty<long>())
                     )
                     .Catch((Exception ex) => Observable.Start(() => Console.WriteLine(ex.ToString())).Select(_ => 0L))
-                    .SubscribeOn(ImmediateScheduler.Instance)
-                    .Subscribe();
-                    break;
+                    .Count();
+                    return true;
             }
+            return false;
         }
 
         public void DispatchActions(Page appPage, JArray actions)

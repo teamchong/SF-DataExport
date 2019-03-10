@@ -47,14 +47,14 @@ namespace SF_DataExport
                             var pathOpt = cliCfg.Option("-p", "Chrome executable path", CommandOptionType.SingleValue);
                             var channelOpt = cliCfg.Option("-c", "Preferred Chrome Channel", CommandOptionType.SingleValue);
                             var userOpt = cliCfg.Option("-u", "Salesforce User Id", CommandOptionType.SingleValue);
-                            var exportPathOpt = cliCfg.Option("-p", "Export to path", CommandOptionType.SingleValue);
+                            var exportPathOpt = cliCfg.Option("-e", "Export to path", CommandOptionType.SingleValue);
                             cliCfg.OnExecute(async () =>
                             {
                                 await InitializeAsync(appSettings, pathOpt, channelOpt).GoOn();
                                 return await StartAsync(appSettings, orgSettings, "", new JObject
                                 {
                                     ["command"] = AppConstants.COMMAND_DOWNLOAD,
-                                    ["instanceUrl"] = org,
+                                    ["instanceUrl"] = org.Name,
                                     ["userId"] = userOpt.Value(),
                                     ["exportPath"] = exportPathOpt.Value(),
                                 }).GoOn();
@@ -80,6 +80,7 @@ namespace SF_DataExport
             {
                 Console.WriteLine(ex.Message);
             }
+            Console.ReadKey();
         }
 
         static async Task InitializeAsync(JsonConfig appSettings, CommandOption pathOpt, CommandOption channelOpt)
