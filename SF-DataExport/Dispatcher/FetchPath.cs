@@ -17,65 +17,60 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Web;
-using Rx = System.Reactive.Linq.Observable;
 using Unit = System.Reactive.Unit;
 
 namespace SF_DataExport.Dispatcher
 {
     public class FetchPath
     {
-        public JToken Dispatch(JToken payload, AppStateManager appState)
+        public void Dispatch(JToken payload, AppStateManager appState)
         {
-            Rx.Start(() =>
-            {
-                var search = payload?["search"]?.ToString()?.Trim() ?? "";
-                var value = payload?["value"]?.ToString() ?? "";
-                var field = payload?["field"]?.ToString() ?? "";
+            var search = ((string)payload?["search"])?.Trim() ?? "";
+            var value = ((string)payload?["value"]) ?? "";
+            var field = ((string)payload?["field"]) ?? "";
 
-                if (search != "" && field != "")
+            if (search != "" && field != "")
+            {
+                try
                 {
-                    try
+                    if (Directory.Exists(search))
                     {
-                        if (Directory.Exists(search))
+                        appState.Commit(new JObject
                         {
-                            appState.Commit(new JObject
-                            {
-                                [field] = new JArray(new[] { value }.Where(s => s != "")
-                                    .Concat(Directory.GetFiles(search)).Distinct())
-                            });
-                            return;
-                        }
-                        else
+                            [field] = new JArray(new[] { value }.Where(s => s != "")
+                                .Concat(Directory.GetFiles(search)).Distinct())
+                        });
+                        return;
+                    }
+                    else
+                    {
+                        var dir = Path.GetDirectoryName(search);
+                        if (Directory.Exists(dir))
                         {
-                            var dir = Path.GetDirectoryName(search);
-                            if (Directory.Exists(dir))
+                            if (File.Exists(search))
                             {
-                                if (File.Exists(search))
+                                appState.Commit(new JObject
                                 {
-                                    appState.Commit(new JObject
-                                    {
-                                        [field] = new JArray(new[] { search, value }.Where(s => s != "")
-                                        .Concat(Directory.GetFiles(dir)).Distinct())
-                                    });
-                                }
-                                else
+                                    [field] = new JArray(new[] { search, value }.Where(s => s != "")
+                                    .Concat(Directory.GetFiles(dir)).Distinct())
+                                });
+                                return;
+                            }
+                            else
+                            {
+                                appState.Commit(new JObject
                                 {
-                                    appState.Commit(new JObject
-                                    {
-                                        [field] = new JArray(new[] { value }.Where(s => s != "")
-                                        .Concat(Directory.GetDirectories(dir)).Distinct())
-                                    });
-                                }
+                                    [field] = new JArray(new[] { value }.Where(s => s != "")
+                                    .Concat(Directory.GetDirectories(dir)).Distinct())
+                                });
                                 return;
                             }
                         }
                     }
-                    catch { }
                 }
-                appState.Commit(new JObject { [field] = new JArray(new[] { value }.Where(s => s != "")) });
-            })
-            .SubscribeTask();
-            return (JToken)null;
+                catch { }
+            }
+            appState.Commit(new JObject { [field] = new JArray(new[] { value }.Where(s => s != "")) });
         }
     }
 }

@@ -17,54 +17,48 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Web;
-using Rx = System.Reactive.Linq.Observable;
 using Unit = System.Reactive.Unit;
 
 namespace SF_DataExport.Dispatcher
 {
     public class FetchDirPath
     {
-        public JToken Dispatch(JToken payload, AppStateManager appState)
+        public void Dispatch(JToken payload, AppStateManager appState)
         {
-            Rx.Start(() =>
-            {
-                var search = payload?["search"]?.ToString()?.Trim()?.TrimEnd(Path.DirectorySeparatorChar) ?? "";
-                var value = payload?["value"]?.ToString() ?? "";
-                var field = payload?["field"]?.ToString() ?? "";
+            var search = ((string)payload?["search"])?.Trim()?.TrimEnd(Path.DirectorySeparatorChar) ?? "";
+            var value = ((string)payload?["value"]) ?? "";
+            var field = ((string)payload?["field"]) ?? "";
 
-                if (search != "" && field != "")
+            if (search != "" && field != "")
+            {
+                try
                 {
-                    try
+                    if (Directory.Exists(search))
                     {
-                        if (Directory.Exists(search))
+                        appState.Commit(new JObject
+                        {
+                            [field] = new JArray(new[] { search.TrimEnd(Path.DirectorySeparatorChar), value }.Where(s => s != "")
+                            .Concat(Directory.GetDirectories(search)).Select(d => d.TrimEnd(Path.DirectorySeparatorChar)).Distinct())
+                        });
+                        return;
+                    }
+                    else
+                    {
+                        var dir = Path.GetDirectoryName(search);
+                        if (Directory.Exists(dir))
                         {
                             appState.Commit(new JObject
                             {
-                                [field] = new JArray(new[] { search.TrimEnd(Path.DirectorySeparatorChar), value }.Where(s => s != "")
-                                .Concat(Directory.GetDirectories(search)).Select(d => d.TrimEnd(Path.DirectorySeparatorChar)).Distinct())
+                                [field] = new JArray(new[] { dir.TrimEnd(Path.DirectorySeparatorChar), value }.Where(s => s != "")
+                                .Concat(Directory.GetDirectories(dir)).Select(d => d.TrimEnd(Path.DirectorySeparatorChar)).Distinct())
                             });
                             return;
                         }
-                        else
-                        {
-                            var dir = Path.GetDirectoryName(search);
-                            if (Directory.Exists(dir))
-                            {
-                                appState.Commit(new JObject
-                                {
-                                    [field] = new JArray(new[] { dir.TrimEnd(Path.DirectorySeparatorChar), value }.Where(s => s != "")
-                                    .Concat(Directory.GetDirectories(dir)).Select(d => d.TrimEnd(Path.DirectorySeparatorChar)).Distinct())
-                                });
-                                return;
-                            }
-                        }
                     }
-                    catch { }
                 }
-                appState.Commit(new JObject { [field] = new JArray(new[] { value }.Where(s => s != "")) });
-            })
-            .SubscribeTask();
-            return (JToken)null;
+                catch { }
+            }
+            appState.Commit(new JObject { [field] = new JArray(new[] { value }.Where(s => s != "")) });
         }
     }
 }

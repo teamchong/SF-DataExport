@@ -17,18 +17,17 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Web;
-using Rx = System.Reactive.Linq.Observable;
 using Unit = System.Reactive.Unit;
 
 namespace SF_DataExport.Dispatcher
 {
     public class RemoveOrg
     {
-        public JToken Dispatch(JToken payload, AppStateManager appState, ResourceManager resource, JsonConfig appSettings, JsonConfig orgSettings)
+        public void Dispatch(JToken payload, AppStateManager appState, ResourceManager resource, JsonConfig appSettings, JsonConfig orgSettings)
         {
-            Rx.FromAsync(async () =>
+            Observable.FromAsync(async () =>
             {
-                var instanceUrl = payload?.ToString() ?? "";
+                var instanceUrl = (string)payload ?? "";
                 var loginUrl = resource.GetLoginUrl(orgSettings.Get(o => o[instanceUrl][OAuth.ID]));
                 await orgSettings.SaveAysnc(json =>
                     {
@@ -36,10 +35,10 @@ namespace SF_DataExport.Dispatcher
                         {
                             json.Remove(instanceUrl);
                         }
-                    }).Continue();
+                    }).GoOn();
                 appState.Commit(appState.GetOrgSettings());
 
-                if (appState.Value["currentInstanceUrl"]?.ToString() == instanceUrl)
+                if ((string)appState.Value["currentInstanceUrl"] == instanceUrl)
                 {
                     appState.Commit(new JObject
                     {
@@ -51,17 +50,16 @@ namespace SF_DataExport.Dispatcher
                         ["userEmail"] = "",
                         ["userId"] = "",
                         ["userName"] = "",
-                        ["userPhoto"] = "",
+                        ["userPicture"] = "",
+                        ["userThumbnail"] = "",
                         ["users"] = new JArray()
                     });
                 }
                 var oauthPage = instanceUrl +
                     "/identity/app/connectedAppsUserList.apexp?app_name=SFDataExport&consumer_key=" +
                     HttpUtility.UrlEncode(resource.GetClientIdByLoginUrl(loginUrl));
-                resource.OpenBrowserIncognito(oauthPage, appSettings.GetString(AppConstants.CHROME_PATH));
-            })
-            .SubscribeTask();
-            return (JToken)null;
+                resource.OpenBrowserIncognito(oauthPage, appSettings.GetString(AppConstants.PATH_CHROME));
+            }).ScheduleTask();
         }
     }
 }

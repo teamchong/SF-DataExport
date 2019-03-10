@@ -27,19 +27,18 @@ namespace SF_DataExport
             CONTENT_HTML_START = string.Join("", @"<html>
 <head>
 <title>Salesforce DataExport</title>
-<link rel='shortcut icon' type='image/x-icon' href='/assets/images/favicon.ico'>
-<style>", GetResource("material-icons.css"), @"</style>
-<style>", GetResource("vuetify.css"), @"</style>
-<style>", GetResource("slds.css"), @"</style>
+<link rel='shortcut icon' type='image/x-icon' href='/favicon.ico'>
+<link rel='stylesheet' type='text/css' href='/material-icons.css'>
+<link rel='stylesheet' type='text/css' href='/vuetify.css'>
+<link rel='stylesheet' type='text/css' href='/slds.css'>
 <style>[v-cloak]{display:none;}</style>
-<script>", GetResource("vue.js"), @"</script>
-<script>", GetResource("vuex.js"), @"</script>
-<script>", GetResource("vuetify.js"), @"</script>
-<script>", GetResource("rxjs.js"), @"</script>
+<script src='/vue.js'></script>
+<script src='/vuex.js'></script>
+<script src='/vuetify.js'></script>
+<script src='/rxjs.js'></script>
 </head>
 <body>
-<script>
-const appState=");
+<script>const appState=");
             CONTENT_HTML_END = string.Join("", @"
 </script>", GetResource("app.html"), @"
 </body>
@@ -231,8 +230,8 @@ const appState=");
             {
                 throw new InvalidOperationException();
             }
-            
-            htmlContent = await client.GetStringAsync(targetUrl).Continue();
+
+            htmlContent = await client.GetStringAsync(targetUrl).GoOn();
             var reg = new Regex(@"top\.window\.location\s*=\s*'([^']+)'");
             var re = reg.Match(htmlContent);
 
@@ -243,7 +242,7 @@ const appState=");
                 {
                     url = instanceUrl + url;
                 }
-                htmlContent = await client.GetStringAsync(url).Continue();
+                htmlContent = await client.GetStringAsync(url).GoOn();
                 re = reg.Match(htmlContent);
             }
             return htmlContent;
@@ -259,8 +258,8 @@ const appState=");
             {
                 using (var client = new HttpClient(handler))
                 {
-                    var htmlContent = await client.GetStringAsync(url).Continue();
-                    var bytes = await client.GetByteArrayAsync(targetUrl).Continue();
+                    var htmlContent = await client.GetStringAsync(url).GoOn();
+                    var bytes = await client.GetByteArrayAsync(targetUrl).GoOn();
                     return string.Join("", "data:", mediaType, ";base64," + Convert.ToBase64String(bytes));
                 }
             }
@@ -285,18 +284,23 @@ const appState=");
                     return "image/jpeg";
                 case ".ttf":
                     return "application/x-font-ttf";
+                case ".css":
+                    return "text/css";
+                case ".js":
+                    return "text/javascript";
             }
             return null;
         }
 
         public Stream GetResourceStream(string resPath)
         {
+            if (string.IsNullOrEmpty(resPath)) return null;
             var asm = typeof(ResourceManager).Assembly;
             return asm.GetManifestResourceStream(string.Join("",
                 "SF_DataExport.res.", resPath?.Replace("-sprite/", "_sprite/").Replace('/', '.')
             ));
         }
-        
+
 
         public string GetDisplaySize(long fileSize)
         {

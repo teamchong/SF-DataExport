@@ -52,7 +52,7 @@ namespace SF_DataExport
 
         public string GetString(string name)
         {
-            return Read()[name]?.ToString() ?? "";
+            return (string)Read()[name] ?? "";
         }
 
         public Task SaveAysnc()
@@ -64,7 +64,7 @@ namespace SF_DataExport
         {
             var json = Read();
             setter(json);
-            await File.WriteAllTextAsync(JsonFilePath, json.ToString()).Continue();
+            await File.WriteAllTextAsync(JsonFilePath, json.ToString()).GoOn();
         }
     }
 }

@@ -10,11 +10,11 @@ using System.Net;
 using System.Net.Http;
 using System.Reactive.Concurrency;
 using System.Reactive.Linq;
+using System.Reactive.Threading.Tasks;
 using System.Reactive.Subjects;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Web;
-using Rx = System.Reactive.Linq.Observable;
 using Unit = System.Reactive.Unit;
 
 namespace SF_DataExport
@@ -30,24 +30,22 @@ namespace SF_DataExport
         public static async Task<AppDialog> CreateAsync(JsonConfig appSettings, JsonConfig orgSettings, ResourceManager resource,
             string instanceUrl, JObject command)
         {
-            var chromePath = appSettings.GetString(AppConstants.CHROME_PATH);
+            var chromePath = appSettings.GetString(AppConstants.PATH_CHROME);
 
-            var closeSubject = new Subject<bool>();
-            var browser = await Puppeteer.LaunchAsync(GetLaunchOptions(chromePath, command?["command"]?.ToString())).Continue();
+            var appState = new AppStateManager(appSettings, orgSettings, resource, command);
+            //appState.Commit(new JObject { ["currentInstanceUrl"] = instanceUrl });
+            var browser = await Puppeteer.LaunchAsync(GetLaunchOptions(chromePath, (string)command?["command"])).GoOn();
+
             try
             {
-                browser.Closed += (object sender, EventArgs e) => closeSubject.OnCompleted();
-                var appPage = await Rx.FromAsync(() => browser.PagesAsync()).Select(p => p.Length > 0 ? p[0] : null);
-
-                var appState = new AppStateManager(appPage, appSettings, orgSettings, resource);
-                appState.Commit(new JObject { ["currentInstanceUrl"] = instanceUrl });
+                var isClose = new Subject<bool>();
+                browser.Closed += (object sender, EventArgs e) => isClose.OnCompleted();
+                var appPage = (await browser.PagesAsync().GoOn()).FirstOrDefault();
 
                 var appDialog = new AppDialog(resource, appSettings, orgSettings, appState, appPage);
-                await appDialog.PageSetupAsync(appPage, true).Continue();
-                
-                await appState.PageLocationReplaceAsync(OAuth.REDIRECT_URI).Continue();
-
-                await closeSubject.Count();
+                await appState.SubscribeAsync(appPage).GoOn();
+                appState.Commit(new JObject { [AppConstants.ACTION_REDIRECT] = OAuth.REDIRECT_URI });
+                await isClose.Count();
                 return appDialog;
             }
             catch (Exception ex)
@@ -64,7 +62,7 @@ namespace SF_DataExport
 
         static LaunchOptions GetLaunchOptions(string chromePath, string command)
         {
-            var favIcon = "<link rel='shortcut icon' type='image/x-icon' href='/assets/images/favicon.ico'>";
+            var favIcon = "<link rel='shortcut icon' type='image/x-icon' href='https://login.salesforce.com/favicon.ico'>";
             var loadingPage = "data:text/html,<title>Loading SF DataLoader...</title>" + favIcon;
 
             var launchOpts = new LaunchOptions();
@@ -76,14 +74,14 @@ namespace SF_DataExport
             launchOpts.Args = new string[] { string.Join(" ", new [] {
                 $"--force-app-mode",
                 $"--disable-extensions",
-                $"--enable-experimental-accessibility-features",
-                $"--no-sandbox",
-                $"--disable-web-security",
+                //$"--enable-experimental-accessibility-features",
+                //$"--no-sandbox",
+                //$"--disable-web-security",
                 $"--user-agent=\"dotnetforce\"",
-                $"--enable-features=NetworkService",
+                //$"--enable-features=NetworkService",
                 $"--app=\"{loadingPage}\"",
                 $"--start-maximized",
-                $"--ignore-certificate-errors"
+                //$"--ignore-certificate-errors"
             }) };
             return launchOpts;
         }
@@ -95,66 +93,57 @@ namespace SF_DataExport
             OrgSettings = orgSettings;
             AppState = appState;
             AppPage = appPage;
+
+            appPage.Error += Page_Error;
+            appPage.PageError += Page_PageError;
+            appPage.Console += Page_Console;
+            //appPage.Response += Page_Response
+            appPage.Request += Page_Request;
+            appPage.RequestFinished += Page_RequestFinished;
+            appPage.RequestFailed += Page_RequestFailed;
+            //appPage.DOMContentLoaded += Page_DOMContentLoaded;
         }
 
-        async Task<Page> PageSetupAsync(Page page, bool interception)
+
+
+        IObservable<Unit> PageInterception(Page appPage, Func<Task> func, Request request)
         {
-            await Task.WhenAll(
-                page.SetRequestInterceptionAsync(interception),
-                page.SetCacheEnabledAsync(false),
-                page.SetBypassCSPAsync(true),
-                page.ExposeFunctionAsync("subscribeDispatch", (JArray actions) =>
+            return Observable.FromAsync(async () =>
+            {
+                if (request.Method != HttpMethod.Get)
                 {
-                    if (Resource.IsRedirectPage(page.Url))
-                    {
-                        return AppState.SubscribeDispatch(actions);
-                    }
-                    return (JToken)null;
-                }),
-                Task.Run(() =>
-                {
-                    page.Error += Page_Error;
-                    page.PageError += Page_PageError;
-                    page.Console += Page_Console;
-                    //page.Response += Page_Response;
-                    page.Request += Page_Request;
-                    page.RequestFinished += Page_RequestFinished;
-                    page.RequestFailed += Page_RequestFailed;
-                    //page.DOMContentLoaded += Page_DOMContentLoaded;
-                })
-            ).Continue();
-            return page;
+                    await appPage.SetRequestInterceptionAsync(false).GoOn();
+                }
+                await func().GoOn();
+            })
+            .Catch((Exception ex) => Observable.Start(() => Console.WriteLine(ex.ToString())));
         }
 
-        void PageInterception(Func<Task> func, Request request)
+        void Page_Error(object sender, PuppeteerSharp.ErrorEventArgs e)
         {
-            Rx.Concat(
-                Rx.If(() => request.Method != HttpMethod.Get,
-                Rx.FromAsync(() => AppPage.SetRequestInterceptionAsync(false))),
-                Rx.FromAsync(func)
-            )
-            .Catch((Exception ex) => Rx.Empty<Unit>()).SubscribeTask();
+            Console.WriteLine("Error: " + e.Error);
         }
 
-        void Page_Error(object sender, PuppeteerSharp.ErrorEventArgs e) => Console.WriteLine("Error: " + e.Error);
-
-        void Page_PageError(object sender, PageErrorEventArgs e) => Console.WriteLine("PageError: " + e.Message);
+        void Page_PageError(object sender, PageErrorEventArgs e)
+        {
+            Console.WriteLine("PageError: " + e.Message);
+        }
 
         void Page_Console(object sender, ConsoleEventArgs e)
         {
-            Rx.FromAsync(async () =>
+            Observable.FromAsync(async () =>
             {
                 var messages = new List<string>();
                 foreach (var arg in e.Message.Args)
                 {
-                    var message = (await arg.GetPropertyAsync("message").Continue())?.RemoteObject?.Value?.ToString();
+                    var message = (string)(await arg.GetPropertyAsync("message").GoOn())?.RemoteObject?.Value;
                     if (!string.IsNullOrEmpty(message))
                     {
                         messages.Add(message);
                     }
                     else
                     {
-                        messages.Add(JsonConvert.SerializeObject(await arg.JsonValueAsync().Continue(), Formatting.Indented));
+                        messages.Add(JsonConvert.SerializeObject(await arg.JsonValueAsync().GoOn(), Formatting.Indented));
                     }
                 }
                 Console.WriteLine(
@@ -163,92 +152,98 @@ namespace SF_DataExport
                     "Line: " + e.Message.Location.LineNumber + "\n" +
                     "Column: " + e.Message.Location.ColumnNumber + "\n" +
                     (messages.Count > 0 ? string.Join(Environment.NewLine, messages) : ""));
-            }).SubscribeTask();
+            }).ScheduleTask();
         }
 
-        void Page_Response(object sender, ResponseCreatedEventArgs e) => Console.WriteLine("Response: " + e.Response.Url);
+        void Page_Response(object sender, ResponseCreatedEventArgs e)
+        {
+            Console.WriteLine("Response: " + e.Response.Url);
+        }
 
         void Page_Request(object sender, RequestEventArgs e)
         {
+            var appPage = sender as Page;
+            if (appPage == null) return;
+
             switch (e.Request.Url)
             {
                 case OAuth.REDIRECT_URI:
                 case OAuth.REDIRECT_URI_SANDBOX:
-                    Rx.FromAsync(async () =>
+                    Observable.FromAsync(() => appPage.SetRequestInterceptionAsync(true))
+                    .SelectMany(_ => PageInterception(appPage, () => e.Request.RespondAsync(new ResponseData
                     {
-                        await AppPage.SetRequestInterceptionAsync(true).Continue();
-                        PageInterception(() => e.Request.RespondAsync(new ResponseData
-                        {
-                            Status = HttpStatusCode.Created,
-                            ContentType = "text/html",
-                            Body = AppState.GetPageContent(),
-                            Headers = new Dictionary<string, object> { ["Cache-Control"] = "no-store" },
-                        }), e.Request);
-                    }).SubscribeTask();
+                        Status = HttpStatusCode.Created,
+                        ContentType = "text/html",
+                        Body = AppState.GetPageContent(),
+                        Headers = new Dictionary<string, object> { ["Cache-Control"] = "no-store" },
+                    }), e.Request))
+                        .ScheduleTask();
                     break;
                 case var url when Resource.IsLoginUrl(url) && url.Contains(".salesforce.com/assets/icons/"):
-                    var icoPath = "icons/" + e.Request.Url.Split(".salesforce.com/assets/icons/", 2).Last();
-                    var ico = Resource.GetResourceBytes(icoPath);
-                    if (ico == null)
-                        PageInterception(() => e.Request.ContinueAsync(), e.Request);
+                    var iconPath = "icons/" + e.Request.Url.Split(".salesforce.com/assets/icons/", 2).Last();
+                    var icon = Resource.GetResourceBytes(iconPath);
+                    if (icon == null)
+                        PageInterception(appPage, () => e.Request.ContinueAsync(), e.Request).ScheduleTask();
                     else
-                        PageInterception(() => e.Request.RespondAsync(new ResponseData
+                        PageInterception(appPage, () => e.Request.RespondAsync(new ResponseData
                         {
                             Status = HttpStatusCode.OK,
-                            ContentType = Resource.GetContentType(icoPath),
-                            BodyData = ico
-                        }), e.Request);
+                            ContentType = Resource.GetContentType(iconPath),
+                            BodyData = icon
+                        }), e.Request).ScheduleTask();
                     break;
                 case var url when Resource.IsLoginUrl(url) && url.Contains(".salesforce.com/assets/images/"):
                     var imgPath = "images/" + e.Request.Url.Split(".salesforce.com/assets/images/", 2).Last();
-                    if (imgPath == "images/favicon.ico")
-                    {
-                        PageInterception(() => e.Request.RespondAsync(new ResponseData
+                    var img = Resource.GetResourceBytes(imgPath);
+                    if (img == null)
+                        PageInterception(appPage, () => e.Request.ContinueAsync(), e.Request).ScheduleTask();
+                    else
+                        PageInterception(appPage, () => e.Request.RespondAsync(new ResponseData
                         {
                             Status = HttpStatusCode.OK,
-                            ContentType = "image/x-icon",
-                            BodyData = Resource.GetResourceBytes("favicon.ico")
-                        }), e.Request);
-                    }
-                    else
-                    {
-                        var img = Resource.GetResourceBytes(imgPath);
-                        if (img == null)
-                            PageInterception(() => e.Request.ContinueAsync(), e.Request);
-                        else
-                            PageInterception(() => e.Request.RespondAsync(new ResponseData
-                            {
-                                Status = HttpStatusCode.OK,
-                                ContentType = Resource.GetContentType(imgPath),
-                                BodyData = img
-                            }), e.Request);
-                    }
+                            ContentType = Resource.GetContentType(imgPath),
+                            BodyData = img
+                        }), e.Request).ScheduleTask();
                     break;
-                case var url when Resource.IsLoginUrl(url) && url.Contains(".salesforce.com/services/fonts/"):
-                    var fntPath = "fonts/" + e.Request.Url.Split(".salesforce.com/services/fonts/", 2).Last();
+                case var url when Resource.IsLoginUrl(url) && url.Contains(".salesforce.com/fonts/"):
+                    var fntPath = "fonts/" + e.Request.Url.Split(".salesforce.com/fonts/", 2).Last();
                     var fnt = Resource.GetResourceBytes(fntPath);
                     if (fnt == null)
-                        PageInterception(() => e.Request.ContinueAsync(), e.Request);
+                        PageInterception(appPage, () => e.Request.ContinueAsync(), e.Request).ScheduleTask();
                     else
-                        PageInterception(() => e.Request.RespondAsync(new ResponseData
+                        PageInterception(appPage, () => e.Request.RespondAsync(new ResponseData
                         {
                             Status = HttpStatusCode.OK,
                             ContentType = Resource.GetContentType(fntPath),
                             BodyData = fnt
-                        }), e.Request);
+                        }), e.Request).ScheduleTask();
+                    break;
+                case var url when Resource.IsLoginUrl(url) && url.Count(c => c == '/') == 3 && !url.EndsWith('/'):
+                    var path = e.Request.Url.Split('/').LastOrDefault();
+                    var file = Resource.GetResource(path);
+                    if (file == null)
+                        PageInterception(appPage, () => e.Request.ContinueAsync(), e.Request).ScheduleTask();
+                    else
+                        PageInterception(appPage, () => e.Request.RespondAsync(new ResponseData
+                        {
+                            Status = HttpStatusCode.OK,
+                            ContentType = Resource.GetContentType(path),
+                            Body = file
+                        }), e.Request).ScheduleTask();
                     break;
                 default:
-                    PageInterception(() => e.Request.ContinueAsync(), e.Request);
+                    PageInterception(appPage, () => e.Request.ContinueAsync(), e.Request).ScheduleTask();
                     break;
             }
         }
 
         void Page_RequestFinished(object sender, RequestEventArgs e)
         {
-            switch (AppPage.Target.Url)
+            var appPage = sender as Page;
+            switch (appPage?.Target.Url)
             {
                 case var url when url.StartsWith(OAuth.REDIRECT_URI + "#") || url.StartsWith(OAuth.REDIRECT_URI_SANDBOX + "#"):
-                    Rx.FromAsync(async () =>
+                    Observable.FromAsync(async () =>
                     {
                         var tokens = HttpUtility.ParseQueryString(url.Split(new[] { '#' }, 2).Last());
                         if (tokens.Count > 0)
@@ -259,74 +254,102 @@ namespace SF_DataExport
                                 newOrg[key] = tokens[key];
                             }
 
-                            if (new[] { OAuth.ACCESS_TOKEN, OAuth.INSTANCE_URL }.All(s => !string.IsNullOrEmpty(newOrg[s]?.ToString())))
+                            if (new[] { OAuth.ACCESS_TOKEN, OAuth.INSTANCE_URL }.All(s => !string.IsNullOrEmpty((string)newOrg[s])))
                             {
-                                var client = new DNFClient(newOrg[OAuth.INSTANCE_URL]?.ToString(), newOrg[OAuth.ACCESS_TOKEN]?.ToString(), newOrg[OAuth.REFRESH_TOKEN]?.ToString());
+                                var client = new DNFClient((string)newOrg[OAuth.INSTANCE_URL], (string)newOrg[OAuth.ACCESS_TOKEN], (string)newOrg[OAuth.REFRESH_TOKEN]);
 
                                 try
                                 {
                                     var loginUrl = Resource.GetLoginUrl(newOrg[OAuth.ID]);
-                                    await client.TokenRefreshAsync(new Uri(loginUrl), Resource.GetClientIdByLoginUrl(loginUrl)).Continue();
+                                    await client.TokenRefreshAsync(new Uri(loginUrl), Resource.GetClientIdByLoginUrl(loginUrl)).GoOn();
                                     await AppState.SetOrganizationAsync(
-                                        newOrg[OAuth.ACCESS_TOKEN]?.ToString(),
-                                        newOrg[OAuth.INSTANCE_URL]?.ToString(),
-                                        newOrg[OAuth.ID]?.ToString(),
-                                        newOrg[OAuth.REFRESH_TOKEN]?.ToString()).Continue();
+                                        (string)newOrg[OAuth.ACCESS_TOKEN],
+                                        (string)newOrg[OAuth.INSTANCE_URL],
+                                        (string)newOrg[OAuth.ID],
+                                        (string)newOrg[OAuth.REFRESH_TOKEN]
+                                    ).GoOn();
                                     AppState.Commit(AppState.GetOrgSettings());
                                     AppState.SetCurrentInstanceUrl(client);
                                 }
                                 catch (Exception ex)
                                 {
-                                    AppState.Commit(new JObject { ["currentInstanceUrl"] = "", ["showOrgModal"] = true });
+                                    AppState.Commit(new JObject
+                                    {
+                                        ["currentAccessToken"] = "",
+                                        ["currentId"] = "",
+                                        ["currentInstanceUrl"] = "",
+                                        ["showOrgModal"] = true,
+                                        ["alertMessage"] = $"Login fail (REST)\n${ex.Message}"
+                                    });
                                     Console.WriteLine($"Login fail (REST)\n${ex.Message}");
-                                    AppState.PageAlert($"Login fail (REST)\n${ex.Message}");
                                 }
                             }
-                            else if (new[] { "error", "error_description" }.All(s => !string.IsNullOrEmpty(newOrg[s]?.ToString())))
+                            else if (new[] { "error", "error_description" }.All(s => !string.IsNullOrEmpty((string)newOrg[s])))
                             {
-                                AppState.Commit(new JObject { ["currentInstanceUrl"] = "", ["showOrgModal"] = true });
+                                AppState.Commit(new JObject
+                                {
+                                    ["currentAccessToken"] = "",
+                                    ["currentId"] = "",
+                                    ["currentInstanceUrl"] = "",
+                                    ["showOrgModal"] = true,
+                                    ["alertMessage"] = $"Login fail ({newOrg["error"]})\n${newOrg["error_description"]}"
+                                });
                                 Console.WriteLine($"Login fail ({newOrg["error"]})\n${newOrg["error_description"]}");
-                                AppState.PageAlert($"Login fail ({newOrg["error"]})\n${newOrg["error_description"]}");
                             }
                             else
                             {
-                                AppState.Commit(new JObject { ["currentInstanceUrl"] = "", ["showOrgModal"] = true });
+                                AppState.Commit(new JObject
+                                {
+                                    ["currentAccessToken"] = "",
+                                    ["currentId"] = "",
+                                    ["currentInstanceUrl"] = "",
+                                    ["showOrgModal"] = true,
+                                    ["alertMessage"] = $"Login fail (Unknown)\n${newOrg}"
+                                });
                                 Console.WriteLine($"Login fail (Unknown)\n${newOrg}");
-                                AppState.PageAlert($"Login fail (Unknown)\n${newOrg}");
                             }
                         }
                         else
                         {
-                            AppState.Commit(new JObject { ["currentInstanceUrl"] = "", ["showOrgModal"] = true });
+                            AppState.Commit(new JObject
+                            {
+                                ["currentAccessToken"] = "",
+                                ["currentId"] = "",
+                                ["currentInstanceUrl"] = "",
+                                ["showOrgModal"] = true
+                            });
                         }
                         return Resource.GetRedirectUrlByLoginUrl(url);
                     })
-                    .SelectMany(redirectUrl => Rx.FromAsync(() =>
-                        AppState.PageLocationReplaceAsync(redirectUrl))).SubscribeTask();
+                    .SelectMany(redirectUrl =>
+                        Observable.Start(() => AppState.Commit(new JObject { [AppConstants.ACTION_REDIRECT] = redirectUrl }))
+                    ).ScheduleTask();
                     break;
                 case var url when url.StartsWith(OAuth.REDIRECT_URI + "?") || url.StartsWith(OAuth.REDIRECT_URI_SANDBOX + "?"):
-                    Rx.FromAsync(() => AppState.PageLocationReplaceAsync(OAuth.REDIRECT_URI)).SubscribeTask();
+                    AppState.Commit(new JObject { [AppConstants.ACTION_REDIRECT] = OAuth.REDIRECT_URI });
                     break;
             }
         }
 
         void Page_RequestFailed(object sender, RequestEventArgs e)
         {
-            switch (AppPage.Target.Url)
+            var appPage = sender as Page;
+            Console.WriteLine("RequestFailed: " + e.Request.Url);
+            switch (appPage?.Target.Url)
             {
                 case var url when url.StartsWith(OAuth.REDIRECT_URI + "#") || url.StartsWith(OAuth.REDIRECT_URI_SANDBOX + "#")
                 || url.StartsWith(OAuth.REDIRECT_URI + "?") || url.StartsWith(OAuth.REDIRECT_URI_SANDBOX + "?"):
-                    Rx.FromAsync(() => AppState.PageLocationReplaceAsync(OAuth.REDIRECT_URI)).SubscribeTask();
+                    AppState.Commit(new JObject { [AppConstants.ACTION_REDIRECT] = OAuth.REDIRECT_URI });
                     break;
             }
         }
 
         void Page_DOMContentLoaded(object sender, EventArgs e)
         {
-            //switch (AppPage.Url)
+            //var appPage = sender as Page;
+            //switch (appPage?.Url)
             //{
             //}
         }
-
     }
 }

@@ -1,4 +1,5 @@
-﻿using DotNetForce;
+﻿using Newtonsoft.Json;
+using DotNetForce;
 using HtmlAgilityPack;
 using Newtonsoft.Json.Linq;
 using PuppeteerSharp;
@@ -17,7 +18,7 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Web;
-using Rx = System.Reactive.Linq.Observable;
+using StringBuilder = System.Text.StringBuilder;
 using Unit = System.Reactive.Unit;
 
 namespace SF_DataExport
@@ -31,27 +32,32 @@ namespace SF_DataExport
             PropertyNameComparison = StringComparison.CurrentCulture,
         };
 
-        ResourceManager Resource { get; set; }
-        Page AppPage { get; set; }
         JsonConfig AppSettings { get; set; }
         JsonConfig OrgSettings { get; set; }
+        ResourceManager Resource { get; set; }
+        JObject Command { get; set; }
+
         JObject State { get; set; }
         Subject<JObject> CommitSubject = new Subject<JObject>();
 
         public JObject Value { get => State; }
 
-        public AppStateManager(Page appPage, JsonConfig appSettings, JsonConfig orgSettings, ResourceManager resource)
+        public AppStateManager(JsonConfig appSettings, JsonConfig orgSettings, ResourceManager resource, JObject command)
         {
-            AppPage = appPage;
-            Resource = resource;
             AppSettings = appSettings;
             OrgSettings = orgSettings;
+            Resource = resource;
+            Command = command;
             State = new JObject
             {
-                ["chromePath"] = AppSettings.GetString(AppConstants.CHROME_PATH),
-                ["chromePathItems"] = new JArray(AppSettings.GetString(AppConstants.CHROME_PATH)),
+                ["alertMessage"] = "",
+                ["chromePath"] = AppSettings.GetString(AppConstants.PATH_CHROME),
+                ["chromePathItems"] = new JArray(AppSettings.GetString(AppConstants.PATH_CHROME)),
                 ["cmdExport"] = "dotnet " + AppDomain.CurrentDomain.FriendlyName + ".dll download@",
+                ["currentAccessToken"] = "",
+                ["currentId"] = "",
                 ["currentInstanceUrl"] = "",
+                ["exportCount"] = null,
                 ["exportPath"] = AppDomain.CurrentDomain.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar),
                 ["exportPathItems"] = new JArray(AppDomain.CurrentDomain.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar)),
                 ["exportResult"] = "",
@@ -68,123 +74,164 @@ namespace SF_DataExport
                 ["userEmail"] = "",
                 ["userId"] = "",
                 ["userName"] = "",
-                ["userPhoto"] = "",
+                ["userPicture"] = "",
+                ["userThumbnail"] = "",
                 ["users"] = new JArray(),
             };
             State.Merge(GetOrgSettings(), MergeSettings);
-            Subscribe();
+            ProcessCommand(command);
         }
 
-        public async Task<Response> PageRedirectAsync(string url)
+        public void ProcessCommand(JObject command)
         {
-            await AppPage.EvaluateExpressionAsync("location.href='" + HttpUtility.JavaScriptStringEncode(url) + "'").Continue();
-            return await AppPage.WaitForNavigationAsync(new NavigationOptions { WaitUntil = new[] { WaitUntilNavigation.DOMContentLoaded } }).Continue();
+            if (command == null) return;
+
+            switch ((string)command?["command"])
+            {
+                case AppConstants.COMMAND_DOWNLOAD:
+                    Observable.Merge(
+                        Observable.Start(() => new DownloadExports().Dispatch(command, this, Resource, OrgSettings)).Select(_ => 0L),
+                        Observable.Start(() =>
+                        {
+                            var exportCount = (long?)State["exportCount"];
+                            if (exportCount != null)
+                            {
+                                var exportResultFiles = (JObject)State["exportResultFiles"];
+                                var pending = exportResultFiles.PropertyValues().Select(p => (string)p)
+                                    .Count(r => !r.StartsWith("Downloaded....") && !r.StartsWith("Skipped....") && !r.StartsWith("Failed...."));
+                                if (pending <= 0)
+                                {
+                                    return Observable.Throw<long>(new EndOfStreamException());
+                                }
+                            }
+                            return Observable.Timer(TimeSpan.FromSeconds(10));
+                        }).Concat().Repeat()
+                        .Catch((EndOfStreamException ex) => Observable.Empty<long>())
+                    )
+                    .Catch((Exception ex) => Observable.Start(() => Console.WriteLine(ex.ToString())).Select(_ => 0L))
+                    .SubscribeOn(ImmediateScheduler.Instance)
+                    .Subscribe();
+                    break;
+            }
         }
 
-        public async Task<Response> PageLocationReplaceAsync(string url)
-        {
-            await AppPage.EvaluateExpressionAsync("location.replace('" + HttpUtility.JavaScriptStringEncode(url) + "')").Continue();
-            return await AppPage.WaitForNavigationAsync(new NavigationOptions { WaitUntil = new[] { WaitUntilNavigation.DOMContentLoaded } }).Continue();
-        }
-
-        public void PageAlert(string message)
-        {
-            Rx.FromAsync(() => AppPage.EvaluateFunctionAsync("alert", message ?? ""))
-                .Catch((Exception ex) => Rx.Start(() => Console.WriteLine(ex.ToString())).SelectMany(_ => Rx.Empty<JToken>()))
-                .SubscribeTask();
-        }
-
-        public void PageConfirm(string message)
-        {
-            Rx.FromAsync(() => AppPage.EvaluateFunctionAsync("confirm", message ?? ""))
-                .Catch((Exception ex) => Rx.Start(() => Console.WriteLine(ex.ToString())).SelectMany(_ => Rx.Empty<JToken>()))
-                .SubscribeTask();
-        }
-
-        public void PagePrompt(string message)
-        {
-            PagePrompt(message, "");
-        }
-
-        public void PagePrompt(string message, string defaultValue)
-        {
-            Rx.FromAsync(() => AppPage.EvaluateFunctionAsync("prompt", message ?? "", defaultValue ?? ""))
-                .Catch((Exception ex) => Rx.Start(() => Console.WriteLine(ex.ToString())).SelectMany(_ => Rx.Empty<JToken>()))
-                .SubscribeTask();
-        }
-
-        public JToken SubscribeDispatch(JArray actions)
+        public void DispatchActions(Page appPage, JArray actions)
         {
             for (var i = 0; i < actions.Count; i++)
             {
                 var action = actions[i] as JObject;
                 if (action != null)
                 {
-                    var type = action["type"]?.ToString();
+                    var type = (string)action["type"];
                     var payload = action["payload"];
 
                     switch (type)
                     {
-                        case "fetchDirPath":
-                            return new FetchDirPath().Dispatch(payload, this);
-                        case "fetchPath":
-                            return new FetchPath().Dispatch(payload, this);
-                        case "loginAsUser":
-                            return new LoginAsUser().Dispatch(payload, this, Resource, AppSettings, OrgSettings);
-                        case "viewPage":
-                            return new ViewPage().Dispatch(payload, this, Resource, AppSettings, OrgSettings);
-                        case "viewUserPage":
-                            return new ViewUserPage().Dispatch(payload, this, Resource, AppSettings, OrgSettings);
-                        case "viewDownloadExports":
-                            return new ViewDownloadExports().Dispatch(payload, this, Resource, AppSettings, OrgSettings);
-                        case "downloadExports":
-                            return new DownloadExports().Dispatch(payload, this, Resource, OrgSettings);
-                        case "removeOrg":
-                            return new RemoveOrg().Dispatch(payload, this, Resource, AppSettings, OrgSettings);
-                        case "removeOfflineAccess":
-                            return new RemoveOfflineAccess().Dispatch(payload, this, OrgSettings);
-                        case "saveConfig":
-                            return new SaveConfig().Dispatch(payload, this, AppSettings, OrgSettings);
-                        case "setOrgSettingsPath":
-                            return new SetOrgSettingsPath().Dispatch(payload, this);
                         case "attemptLogin":
-                            return new AttemptLogin().Dispatch(payload, this, Resource, OrgSettings);
+                            new AttemptLogin().Dispatch(payload, this, Resource, OrgSettings);
+                            break;
+                        case "downloadExports":
+                            new DownloadExports().Dispatch(payload, this, Resource, OrgSettings);
+                            break;
+                        case "fetchDirPath":
+                            new FetchDirPath().Dispatch(payload, this);
+                            break;
+                        case "fetchPath":
+                            new FetchPath().Dispatch(payload, this);
+                            break;
+                        case "loginAsUser":
+                            new LoginAsUser().Dispatch(payload, this, Resource, AppSettings, OrgSettings);
+                            break;
+                        case "saveConfig":
+                            new SaveConfig().Dispatch(payload, this, AppSettings, OrgSettings);
+                            break;
+                        case "setOrgSettingsPath":
+                            new SetOrgSettingsPath().Dispatch(payload, this);
+                            break;
+                        case "switchUser":
+                            new SwitchUser().Dispatch(payload, this, Resource, AppSettings, OrgSettings);
+                            break;
+                        case "removeOfflineAccess":
+                            new RemoveOfflineAccess().Dispatch(payload, this, OrgSettings);
+                            break;
+                        case "removeOrg":
+                            new RemoveOrg().Dispatch(payload, this, Resource, AppSettings, OrgSettings);
+                            break;
+                        case "viewDownloadExports":
+                            new ViewDownloadExports().Dispatch(payload, this, Resource, AppSettings, OrgSettings);
+                            break;
+                        case "viewPage":
+                            new ViewPage().Dispatch(payload, this, Resource, AppSettings, OrgSettings);
+                            break;
+                        case "viewUserPage":
+                            new ViewUserPage().Dispatch(payload, this, Resource, AppSettings, OrgSettings);
+                            break;
                         default:
-                            Commit(new JObject { [type] = action["payload"] });
+                            Commit(new JObject { [type] = payload });
                             break;
                     }
                 }
             }
-            return (JToken)null;
         }
 
-        public void Subscribe()
+        public async Task SubscribeAsync(Page appPage)
         {
-            CommitSubject.Buffer(TimeSpan.FromMilliseconds(100)).Where(newStates => newStates.Any())
-                .Select(newStates =>
-                    Rx.FromAsync(() =>
+            await appPage.SetRequestInterceptionAsync(true).GoOn();
+            await appPage.SetCacheEnabledAsync(false).GoOn();
+            await appPage.SetBypassCSPAsync(true).GoOn();
+            await appPage.ExposeFunctionAsync("subscribeDispatch", (JArray actions) =>
+                {
+                    if (Resource.IsRedirectPage(appPage.Url))
                     {
-                        if (Resource.IsRedirectPage(AppPage.Url))
+                        DispatchActions(appPage, actions);
+                    }
+                    return (JToken)null;
+                }).GoOn();
+            CommitSubject.SelectMany((JObject newState) => Observable.Defer(() =>
+                {
+                    var redirect = (string)newState?[AppConstants.ACTION_REDIRECT];
+                    if (!string.IsNullOrEmpty(redirect))
+                    {
+                        return Observable.FromAsync(async () =>
                         {
-                            var expression = new System.Text.StringBuilder("if(typeof storeCommit!=='undefined'){try{storeCommit([");
-                            expression.Append(string.Join(",", newStates.Select(newState => newState.ToString(0))));
-                            expression.Append("])}catch(_){}}");
-                            return AppPage.EvaluateExpressionAsync(expression.ToString());
-                        }
-                        return Task.FromResult<JToken>(null);
-                    })
-                    .Catch((Exception ex) => Rx.Start(() => Console.WriteLine(ex.ToString())).SelectMany(_ => Rx.Empty<JToken>()))
-                 )
-                .Concat()
-                .SubscribeOn(TaskPoolScheduler.Default)
+                            await appPage.GoToAsync(redirect, 0, new[] { WaitUntilNavigation.DOMContentLoaded }).GoOn();
+                            newState.Remove(AppConstants.ACTION_REDIRECT);
+                            return newState;
+                        });
+                    }
+                    return Observable.Return(newState);
+                }))
+                .Where(state => state?.HasValues == true)
+                .Buffer(TimeSpan.FromMilliseconds(100))
+                .Where(newStates => newStates.Any())
+                .SelectMany(newStates =>
+                    Observable.If(() => Resource.IsRedirectPage(appPage.Url),
+                        Observable.FromAsync(() =>
+                        {
+                            //var expression = string.Join("",
+                            //    "if(typeof storeCommit!=='undefined'){try{storeCommit([",
+                            //    string.Join(",", newStates.Select(newState => newState.ToString(0))),
+                            //    "])}catch(_){}}");
+                            //return appPage.EvaluateExpressionAsync(expression.ToString());
+                            return appPage.EvaluateFunctionHandleAsync("storeCommit", newStates);
+                        }),
+                        Observable.Empty<JSHandle>()
+                    )
+                )
+                //.ScheduleTask();
+                .Catch((Exception ex) => Observable.Start(() => Console.WriteLine(ex.ToString())).SelectMany(__ => Observable.Empty<JSHandle>()))
+                .Finally(() => Console.WriteLine("CommitSubject end unexpctedly."))
                 .Subscribe();
+            //.SubscribeOn(TaskPoolScheduler.Default).Subscribe();
+            //
+            //.SubscribeOn(TaskPoolScheduler.Default).Subscribe(_ => Console.WriteLine("next"), err => Console.WriteLine(err.ToString()), () => Console.WriteLine("complete"));
         }
 
         public JObject GetOrgSettings()
         {
             var orgList = OrgSettings.List();
             var orgOfflineAccess = new JArray(orgList
-                    .Where(org => !string.IsNullOrEmpty(OrgSettings.Get(o => o[org]?[OAuth.REFRESH_TOKEN])?.ToString())));
+                    .Where(org => !string.IsNullOrEmpty((string)OrgSettings.Get(o => o[org]?[OAuth.REFRESH_TOKEN]))));
             var orgSandboxes = new JArray(orgList
                     .Where(org => Resource.IsSandboxLoginUrl(Resource.GetLoginUrl(OrgSettings.Get(o => o[org]?[OAuth.ID])))));
             return new JObject
@@ -195,34 +242,26 @@ namespace SF_DataExport
             };
         }
 
-        SemaphoreSlim Throttler = new SemaphoreSlim(1, 1);
-
         public void Commit(JObject newState)
         {
-            Observable.FromAsync(async () =>
+            if (newState != null)
             {
-                if (newState != null)
+                try
                 {
-                    try
-                    {
-                        await Throttler.WaitAsync().Continue();
-                        State.Merge(newState, MergeSettings);
-                        CommitSubject.OnNext(newState);
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine(ex.ToString());
-                    }
-                    finally
-                    {
-                        Throttler.Release();
-                    }
+                    State.Merge(newState, MergeSettings);
+                    State.Remove(AppConstants.ACTION_REDIRECT);
+                    CommitSubject.OnNext(newState);
                 }
-            }).SubscribeOn(CurrentThreadScheduler.Instance).Subscribe();
+                catch (Exception ex)
+                {
+                    Console.WriteLine(ex.ToString());
+                }
+            }
         }
 
         public void SetCurrentInstanceUrl(DNFClient client)
         {
+            var userId = client.Id.Split('/').Last();
             Commit(new JObject
             {
                 ["currentInstanceUrl"] = client.InstanceUrl,
@@ -231,55 +270,67 @@ namespace SF_DataExport
                 ["showOrgModal"] = false,
                 ["userDisplayName"] = "",
                 ["userEmail"] = "",
-                ["userId"] = "",
+                ["userId"] = userId,
                 ["userName"] = "",
-                ["userPhoto"] = "",
+                ["userPicture"] = "",
+                ["userThumbnail"] = "",
                 ["users"] = new JArray()
             });
-            Rx.Merge(
+            Observable.Merge(
 
-                Rx.FromAsync(() => client.GetEnumerableAsync("SELECT Id,Name,Email FROM User WHERE IsActive=true ORDER BY Name,Email"))
-                .Select(records => new JArray(records))
-                .SelectMany(users => Rx.If(
-                    () => State["currentInstanceUrl"]?.ToString() == client.InstanceUrl,
-                    Rx.Start(() => Commit(new JObject { ["users"] = users })),
-                    Rx.Throw<Unit>(new InvalidOperationException())
-                ))
-                .Catch(Rx.Empty<Unit>()),
+                Observable.FromAsync(async () =>
+                {
+                    var users = new JArray(await client.GetEnumerableAsync("SELECT Id,Name,Email FROM User WHERE IsActive=true ORDER BY Name,Email").GoOn());
+                    if ((string)State["currentInstanceUrl"] != client.InstanceUrl)
+                        throw new InvalidOperationException();
+                    Commit(new JObject { ["users"] = users });
+                })
+                .Catch(Observable.Empty<Unit>()),
 
-                Rx.FromAsync(() => client.UserInfo())
-                .SelectMany(userInfo => Rx.Merge(
+                Observable.FromAsync(() => client.UserInfo())
+                .SelectMany(userInfo => Observable.Merge(
 
-                    Rx.Start(() => Commit(new JObject
-                    {
-                        ["userDisplayName"] = userInfo?["display_name"],
-                        ["userEmail"] = userInfo?["email"],
-                        ["userId"] = client.Id.Split('/').Last(),
-                        ["userName"] = userInfo?["username"],
-                    }))
-                    .Catch(Rx.Empty<Unit>()),
-
-                    Rx.FromAsync(() => Resource.GetDataUriViaAccessToken(client.InstanceUrl, client.AccessToken,
-                        userInfo?["photos"]?["thumbnail"]?.ToString(), "image/png"))
+                    Observable.If(() => (string)State["currentInstanceUrl"] == client.InstanceUrl && (string)State["userId"] == userId,
+                        Observable.Start(() => Commit(new JObject
+                        {
+                            ["userDisplayName"] = userInfo?["display_name"],
+                            ["userEmail"] = userInfo?["email"],
+                            ["userName"] = userInfo?["username"],
+                        }))
+                        .Catch(Observable.Empty<Unit>()),
+                        Observable.Empty<Unit>()
+                    ),
+                    
+                    Observable.FromAsync(() => Resource.GetDataUriViaAccessToken(client.InstanceUrl, client.AccessToken,
+                        (string)userInfo?["photos"]?["picture"], "image/png"))
                     .SelectMany(userPhoto =>
-                        Rx.If(
-                            () => State["currentInstanceUrl"]?.ToString() == client.InstanceUrl,
-                            Rx.Start(() => Commit(new JObject { ["userPhoto"] = userPhoto })),
-                            Rx.Throw<Unit>(new InvalidOperationException())
+                        Observable.If(
+                            () => (string)State["currentInstanceUrl"] == client.InstanceUrl && (string)State["userId"] == userId,
+                            Observable.Start(() => Commit(new JObject { ["userPicture"] = userPhoto })),
+                            Observable.Throw<Unit>(new InvalidOperationException())
+                        )
+                    ),
+
+                    Observable.FromAsync(() => Resource.GetDataUriViaAccessToken(client.InstanceUrl, client.AccessToken,
+                        (string)userInfo?["photos"]?["thumbnail"], "image/png"))
+                    .SelectMany(userPhoto =>
+                        Observable.If(
+                            () => (string)State["currentInstanceUrl"] == client.InstanceUrl && (string)State["userId"] == userId,
+                            Observable.Start(() => Commit(new JObject { ["userThumbnail"] = userPhoto })),
+                            Observable.Throw<Unit>(new InvalidOperationException())
                         )
                     )
                 ))
 
             )
-            .SubscribeTask();
+            .ScheduleTask();
         }
 
         public string GetPageContent()
         {
-            var content = new System.Text.StringBuilder(Resource.CONTENT_HTML_START);
-            content.Append(State.ToString(0));
-            content.Append(Resource.CONTENT_HTML_END);
-            return content.ToString();
+            //return "<html>test<img src='/assets/images/avatar1.jpg'/><img src='/assets/images/avatar2.jpg'/></html>";
+            var content = string.Join("", Resource.CONTENT_HTML_START, State.ToString(0), Resource.CONTENT_HTML_END);
+            return content;
         }
 
         public async Task SetOrganizationAsync(
@@ -298,7 +349,7 @@ namespace SF_DataExport
                     [OAuth.REFRESH_TOKEN] = refreshToken ?? "",
                 };
                 json[instanceUrl] = settingForSave;
-            }).Continue();
+            }).GoOn();
             Commit(new JObject { ["orgSettings"] = new JArray(OrgSettings.List()) });
         }
 
@@ -308,21 +359,21 @@ namespace SF_DataExport
             {
                 newDirectoryPath = AppContext.BaseDirectory;
             }
-            var newFilePath = Path.Combine(newDirectoryPath, AppConstants.ORG_SETTINGS_JSON);
+            var newFilePath = Path.Combine(newDirectoryPath, AppConstants.JSON_ORG_SETTINGS);
 
             var oldDirectoryPath = OrgSettings.GetDirectoryPath();
-            var oldFilePath = Path.Combine(newDirectoryPath, AppConstants.ORG_SETTINGS_JSON);
+            var oldFilePath = Path.Combine(newDirectoryPath, AppConstants.JSON_ORG_SETTINGS);
 
             if (newFilePath != oldFilePath)
             {
                 try
                 {
                     var orgData = OrgSettings.Read();
-                    await File.WriteAllTextAsync(newFilePath, orgData.ToString()).Continue();
+                    await File.WriteAllTextAsync(newFilePath, orgData.ToString()).GoOn();
                     try { File.Delete(oldFilePath); } catch { }
-                    await AppSettings.SaveAysnc(o => o[AppConstants.ORG_SETTINGS_PATH] = newDirectoryPath).Continue();
+                    await AppSettings.SaveAysnc(o => o[AppConstants.PATH_ORG_SETTINGS] = newDirectoryPath).GoOn();
                     OrgSettings.SetPath(newFilePath);
-                    Commit(new JObject { [AppConstants.ORG_SETTINGS_PATH] = OrgSettings.GetDirectoryPath() });
+                    Commit(new JObject { [AppConstants.PATH_ORG_SETTINGS] = OrgSettings.GetDirectoryPath() });
                     return null;
                 }
                 catch (Exception ex)

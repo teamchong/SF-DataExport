@@ -17,53 +17,47 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Web;
-using Rx = System.Reactive.Linq.Observable;
 using Unit = System.Reactive.Unit;
 
 namespace SF_DataExport.Dispatcher
 {
     public class SaveConfig
     {
-        public JToken Dispatch(JToken payload, AppStateManager appState, JsonConfig appSettings, JsonConfig orgSettings)
+        public void Dispatch(JToken payload, AppStateManager appState, JsonConfig appSettings, JsonConfig orgSettings)
         {
-            Rx.Start(() =>
-            {
-                var config = payload as JObject;
-                var chromePath = config?[AppConstants.CHROME_PATH]?.ToString();
-                var orgSettingsPath = config?[AppConstants.ORG_SETTINGS_PATH]?.ToString();
-                var newchromePath = config?[AppConstants.CHROME_PATH]?.ToString();
+            appState.Commit(new JObject { ["isLoading"] = true });
+            var config = payload as JObject;
+            var chromePath = (string)config?[AppConstants.PATH_CHROME];
+            var orgSettingsPath = (string)config?[AppConstants.PATH_ORG_SETTINGS];
+            var newchromePath = (string)config?[AppConstants.PATH_CHROME];
 
-                Rx.Merge(
-                    Rx.FromAsync(() => appState.SaveOrgSettingsPathAsync(orgSettingsPath))
-                        .Catch((Exception ex) => Rx.Return(ex.ToString())),
-                        Rx.FromAsync(() => appSettings.SaveAysnc(o => o[AppConstants.CHROME_PATH] = chromePath))
-                        .Select(_ => (string)null)
-                        .Catch((Exception ex) => Rx.Return(ex.ToString()))
-                    )
-                    .Scan(new List<string>(), (errorMessages, errorMessage) =>
-                    {
-                        if (!string.IsNullOrEmpty(errorMessage))
-                        {
-                            errorMessages.Add(errorMessage);
-                        }
-                        return errorMessages;
-                    })
-                    .Select(errorMessages => Rx.Start(() =>
-                    {
-                        var message = string.Join(Environment.NewLine, errorMessages);
-                        if (errorMessages.Count <= 0)
-                        {
-                            appState.PageAlert("Save successfully.");
-                        }
-                        else
-                        {
-                            appState.PageAlert(message);
-                        }
-                    }))
-                    .SubscribeTask();
+            Observable.Merge(
+                Observable.FromAsync(() => appState.SaveOrgSettingsPathAsync(orgSettingsPath))
+                .Catch((Exception ex) => Observable.Return(ex.ToString())),
+
+                Observable.FromAsync(() => appSettings.SaveAysnc(o => o[AppConstants.PATH_CHROME] = chromePath)).Select(_ => (string)null)
+                .Catch((Exception ex) => Observable.Return(ex.ToString()))
+            )
+            .Scan(new List<string>(), (errorMessages, errorMessage) =>
+            {
+                if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    errorMessages.Add(errorMessage);
+                }
+                return errorMessages;
             })
-            .SubscribeTask();
-            return (JToken)null;
+            .Select(errorMessages => Observable.Start(() =>
+            {
+                var message = string.Join(Environment.NewLine, errorMessages);
+                if (errorMessages.Count <= 0)
+                {
+                    appState.Commit(new JObject { ["alertMessage"] = "Save successfully.", ["isLoading"] = false });
+                }
+                else
+                {
+                    appState.Commit(new JObject { ["alertMessage"] = message, ["isLoading"] = false });
+                }
+            })).ScheduleTask();
         }
     }
 }

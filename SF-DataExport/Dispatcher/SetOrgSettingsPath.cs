@@ -17,30 +17,28 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Web;
-using Rx = System.Reactive.Linq.Observable;
 using Unit = System.Reactive.Unit;
 
 namespace SF_DataExport.Dispatcher
 {
     public class SetOrgSettingsPath
     {
-        public JToken Dispatch(JToken payload, AppStateManager appState)
+        public void Dispatch(JToken payload, AppStateManager appState)
         {
-            Rx.FromAsync(async () =>
+            appState.Commit(new JObject { ["isLoading"] = true });
+            Observable.FromAsync(async () =>
             {
-                var orgSettingsPath = payload?.ToString() ?? "";
-                var errorMessage = await appState.SaveOrgSettingsPathAsync(orgSettingsPath).Continue();
+                var orgSettingsPath = (string)payload ?? "";
+                var errorMessage = await appState.SaveOrgSettingsPathAsync(orgSettingsPath).GoOn();
                 if (errorMessage == null)
                 {
-                    appState.PageAlert("Save successfully.");
+                    appState.Commit(new JObject { ["alertMessage"] = "Save successfully.", ["isLoading"] = false });
                 }
                 else
                 {
-                    appState.PageAlert("No change.");
+                    appState.Commit(new JObject { ["alertMessage"] = "No change.", ["isLoading"] = false });
                 }
-            })
-            .SubscribeTask();
-            return (JToken)null;
+            }).ScheduleTask();
         }
     }
 }

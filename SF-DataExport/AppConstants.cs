@@ -6,11 +6,16 @@ using System.Threading.Tasks;
 
 namespace SF_DataExport
 {
-    public static class AppConstants
+    public class AppConstants
     {
-        public static string APP_SETTINGS_JSON = "appsettings.json";
-        public static string CHROME_PATH = "chromePath";
-        public static string ORG_SETTINGS_JSON = "orgsettings.json";
-        public static string ORG_SETTINGS_PATH = "orgSettingsPath";
+        public const string JSON_APP_SETTINGS = "appsettings.json";
+        public const string JSON_ORG_SETTINGS = "orgsettings.json";
+
+        public const string PATH_CHROME = "chromePath";
+        public const string PATH_ORG_SETTINGS = "orgSettingsPath";
+
+        public const string COMMAND_DOWNLOAD = "download";
+        
+        public const string ACTION_REDIRECT = "pageRedirect";
     }
 }

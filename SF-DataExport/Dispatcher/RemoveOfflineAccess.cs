@@ -17,33 +17,30 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Web;
-using Rx = System.Reactive.Linq.Observable;
 using Unit = System.Reactive.Unit;
 
 namespace SF_DataExport.Dispatcher
 {
     public class RemoveOfflineAccess
     {
-        public JToken Dispatch(JToken payload, AppStateManager appState, JsonConfig orgSettings)
+        public void Dispatch(JToken payload, AppStateManager appState, JsonConfig orgSettings)
         {
-            Rx.FromAsync(async () =>
+            Observable.FromAsync(async () =>
             {
-                var instanceUrl = payload?.ToString() ?? "";
+                var instanceUrl = (string)payload ?? "";
                 await orgSettings.SaveAysnc(json =>
                 {
                     if (json[instanceUrl] != null)
                     {
                         json[instanceUrl][OAuth.REFRESH_TOKEN] = "";
                     }
-                }).Continue();
+                }).GoOn();
                 appState.Commit(new JObject
                 {
                     ["orgOfflineAccess"] = new JArray(orgSettings.List()
-                    .Where(org => !string.IsNullOrEmpty(orgSettings.Get(o => o[org]?[OAuth.REFRESH_TOKEN])?.ToString())))
+                    .Where(org => !string.IsNullOrEmpty((string)orgSettings.Get(o => o[org]?[OAuth.REFRESH_TOKEN]))))
                 });
-            })
-            .SubscribeTask();
-            return (JToken)null;
+            }).ScheduleTask();
         }
     }
 }

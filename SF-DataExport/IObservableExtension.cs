@@ -10,10 +10,9 @@ using System.Reactive.Threading.Tasks;
 
 namespace SF_DataExport
 {
-    public static class TaskExtension
+    public static class IObservableExtension
     {
-        public static ConfiguredTaskAwaitable GoOn(this Task task) => task.ConfigureAwait(false);
-
-        public static ConfiguredTaskAwaitable<TResult> GoOn<TResult>(this Task<TResult> task) => task.ConfigureAwait(false);
+        public static IDisposable ScheduleTask<TResult>(this IObservable<TResult> observable) => 
+            observable.ObserveOn(TaskPoolScheduler.Default).SubscribeOn(TaskPoolScheduler.Default).Subscribe();
     }
 }

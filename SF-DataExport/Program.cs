@@ -16,17 +16,17 @@ namespace SF_DataExport
         {
             try
             {
-                var appSettings = new JsonConfig(Path.Combine(AppContext.BaseDirectory, AppConstants.APP_SETTINGS_JSON));
-                var orgSettings = new JsonConfig(Path.Combine(GetOrgPath(appSettings).orgPath, AppConstants.ORG_SETTINGS_JSON));
+                var appSettings = new JsonConfig(Path.Combine(AppContext.BaseDirectory, AppConstants.JSON_APP_SETTINGS));
+                var orgSettings = new JsonConfig(Path.Combine(GetOrgPath(appSettings).orgPath, AppConstants.JSON_ORG_SETTINGS));
 
                 var cliApp = new CommandLineApplication(false);
-                var replaceRex = new Regex( @"^https://|\.my\.salesforce\.com$|\.salesforce\.com$", RegexOptions.IgnoreCase);
+                var replaceRex = new Regex(@"^https://|\.my\.salesforce\.com$|\.salesforce\.com$", RegexOptions.IgnoreCase);
 
                 foreach (var org in orgSettings.Read().Properties())
                 {
                     var orgName = replaceRex.Replace(org.Name, "")
                         .Replace(" ", "-").ToLower();
-                    var hasOfflineAccess = !string.IsNullOrEmpty(org.Value[OAuth.REFRESH_TOKEN]?.ToString());
+                    var hasOfflineAccess = !string.IsNullOrEmpty((string)org.Value[OAuth.REFRESH_TOKEN]);
 
                     cliApp.Command(orgName, cliCfg =>
                     {
@@ -35,8 +35,8 @@ namespace SF_DataExport
                         cliCfg.OnExecute(async () =>
                         {
                             cliApp.ShowHelp();
-                            await InitializeAsync(appSettings, pathOpt, channelOpt).Continue();
-                            return await StartAsync(appSettings, orgSettings, org.Name, null).Continue();
+                            await InitializeAsync(appSettings, pathOpt, channelOpt).GoOn();
+                            return await StartAsync(appSettings, orgSettings, org.Name, null).GoOn();
                         });
                     });
 
@@ -50,13 +50,14 @@ namespace SF_DataExport
                             var exportPathOpt = cliCfg.Option("-p", "Export to path", CommandOptionType.SingleValue);
                             cliCfg.OnExecute(async () =>
                             {
-                                await InitializeAsync(appSettings, pathOpt, channelOpt).Continue();
+                                await InitializeAsync(appSettings, pathOpt, channelOpt).GoOn();
                                 return await StartAsync(appSettings, orgSettings, "", new JObject
                                 {
-                                    ["command"] = "download",
+                                    ["command"] = AppConstants.COMMAND_DOWNLOAD,
+                                    ["instanceUrl"] = org,
                                     ["userId"] = userOpt.Value(),
                                     ["exportPath"] = exportPathOpt.Value(),
-                                }).Continue();
+                                }).GoOn();
                             });
                         });
                     }
@@ -68,8 +69,8 @@ namespace SF_DataExport
                     cliApp.OnExecute(async () =>
                     {
                         cliApp.ShowHelp();
-                        await InitializeAsync(appSettings, pathOpt, channelOpt).Continue();
-                        return await StartAsync(appSettings, orgSettings, "", null).Continue();
+                        await InitializeAsync(appSettings, pathOpt, channelOpt).GoOn();
+                        return await StartAsync(appSettings, orgSettings, "", null).GoOn();
                     });
                 }
 
@@ -79,21 +80,16 @@ namespace SF_DataExport
             {
                 Console.WriteLine(ex.Message);
             }
-
-#if DEBUG
-            Console.WriteLine("Please any key to continue...");
-            Console.ReadKey();
-#endif
         }
 
         static async Task InitializeAsync(JsonConfig appSettings, CommandOption pathOpt, CommandOption channelOpt)
         {
-            var chromePathInConfig = appSettings.GetString(AppConstants.CHROME_PATH);
+            var chromePathInConfig = appSettings.GetString(AppConstants.PATH_CHROME);
             var chromePath = GetChromePath(channelOpt.Value(), pathOpt.Value(), chromePathInConfig);
 
             if (!string.IsNullOrEmpty(chromePath) && chromePathInConfig != chromePath)
             {
-                await appSettings.SaveAysnc(cfg => cfg[AppConstants.CHROME_PATH] = chromePath).Continue();
+                await appSettings.SaveAysnc(cfg => cfg[AppConstants.PATH_CHROME] = chromePath).GoOn();
             }
 
             var (orgPath, orgPathInConfig, orgPathSave) = GetOrgPath(appSettings);
@@ -103,17 +99,21 @@ namespace SF_DataExport
                 await appSettings.SaveAysnc(o =>
                 {
                     if (orgPathSave == "")
-                        o.Remove(AppConstants.ORG_SETTINGS_PATH);
+                    {
+                        o.Remove(AppConstants.PATH_ORG_SETTINGS);
+                    }
                     else
-                        o[AppConstants.ORG_SETTINGS_PATH] = orgPathSave;
-                }).Continue();
+                    {
+                        o[AppConstants.PATH_ORG_SETTINGS] = orgPathSave;
+                    }
+                }).GoOn();
             }
-            Console.WriteLine(AppConstants.APP_SETTINGS_JSON + ": " + appSettings.Read().ToString(0));
+            Console.WriteLine(AppConstants.JSON_APP_SETTINGS + ": " + appSettings.Read().ToString(0));
         }
 
         static (string orgPath, string orgPathInConfig, string orgPathSave) GetOrgPath(JsonConfig appSettings)
         {
-            var orgPathInConfig = appSettings.GetString(AppConstants.ORG_SETTINGS_PATH);
+            var orgPathInConfig = appSettings.GetString(AppConstants.PATH_ORG_SETTINGS);
             var orgPath = (orgPathInConfig != "" ? orgPathInConfig : null)
                 ?? AppContext.BaseDirectory;
             var orgPathSave = orgPath != AppContext.BaseDirectory ? orgPath : "";
@@ -147,13 +147,13 @@ namespace SF_DataExport
 
         static async Task<int> StartAsync(JsonConfig appSettings, JsonConfig orgSettings, string instanceUrl, JObject command)
         {
-            if (string.IsNullOrEmpty(appSettings.GetString(AppConstants.CHROME_PATH)))
+            if (string.IsNullOrEmpty(appSettings.GetString(AppConstants.PATH_CHROME)))
             {
                 new ResourceManager().OpenBrowser("https://www.google.com/chrome");
                 throw new Exception("Cannot find chromium installation path, please specific the path using the -p <path> option.");
             }
 
-            await AppDialog.CreateAsync(appSettings, orgSettings, new ResourceManager(), instanceUrl, command).Continue();
+            await AppDialog.CreateAsync(appSettings, orgSettings, new ResourceManager(), instanceUrl, command).GoOn();
             return 0;
         }
     }

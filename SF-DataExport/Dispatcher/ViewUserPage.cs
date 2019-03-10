@@ -17,26 +17,20 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Web;
-using Rx = System.Reactive.Linq.Observable;
 using Unit = System.Reactive.Unit;
 
 namespace SF_DataExport.Dispatcher
 {
     public class ViewUserPage
     {
-        public JToken Dispatch(JToken payload, AppStateManager appState, ResourceManager resource, JsonConfig appSettings, JsonConfig orgSettings)
+        public void Dispatch(JToken payload, AppStateManager appState, ResourceManager resource, JsonConfig appSettings, JsonConfig orgSettings)
         {
-            Rx.Start(() =>
-            {
-                var instanceUrl = payload["instanceUrl"]?.ToString() ?? "";
-                var userId = payload["userId"]?.ToString() ?? "";
-                var accessToken = orgSettings.Get(o => o[instanceUrl]?[OAuth.ACCESS_TOKEN])?.ToString() ?? "";
-                var targetUrl = instanceUrl + "/" + userId + "?noredirect=1";
-                var urlWithAccessCode = resource.GetUrlViaAccessToken(instanceUrl, accessToken, targetUrl);
-                resource.OpenBrowserIncognito(urlWithAccessCode, appSettings.GetString(AppConstants.CHROME_PATH));
-            })
-            .SubscribeTask();
-            return (JToken)null;
+            var instanceUrl = (string)payload["instanceUrl"] ?? "";
+            var userId = (string)payload["userId"] ?? "";
+            var accessToken = (string)orgSettings.Get(o => o[instanceUrl]?[OAuth.ACCESS_TOKEN]) ?? "";
+            var targetUrl = instanceUrl + "/" + userId + "?noredirect=1";
+            var urlWithAccessCode = resource.GetUrlViaAccessToken(instanceUrl, accessToken, targetUrl);
+            resource.OpenBrowserIncognito(urlWithAccessCode, appSettings.GetString(AppConstants.PATH_CHROME));
         }
     }
 }
