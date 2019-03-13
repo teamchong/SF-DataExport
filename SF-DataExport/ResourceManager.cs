@@ -6,6 +6,7 @@ using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Runtime.InteropServices;
+using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -31,11 +32,13 @@ namespace SF_DataExport
 <link rel='stylesheet' type='text/css' href='/material-icons.css'>
 <link rel='stylesheet' type='text/css' href='/vuetify.css'>
 <link rel='stylesheet' type='text/css' href='/slds.css'>
+<link rel='stylesheet' type='text/css' href='/orgchart.css'>
 <style>[v-cloak]{display:none;}</style>
 <script src='/vue.js'></script>
 <script src='/vuex.js'></script>
 <script src='/vuetify.js'></script>
 <script src='/rxjs.js'></script>
+<script src='/orgchart.js'></script>
 </head>
 <body>
 <script>const appState=");
@@ -43,6 +46,27 @@ namespace SF_DataExport
 </script>", GetResource("app.html"), @"
 </body>
 </html>");
+        }
+
+        public Task<T> RunClientAsUserAsync<T>(Func<HttpClient, CookieContainer, string, Task<T>> funcAsync, string instanceUrl, string accessToken, string targetUrl, string id, string userId)
+        {
+            var targetUrlAsUser = GetLoginUrlAs(instanceUrl, id, userId, targetUrl);
+            return RunClientAsync(funcAsync, instanceUrl, accessToken, targetUrlAsUser);
+        }
+
+        public async Task<T> RunClientAsync<T>(Func<HttpClient, CookieContainer, string, Task<T>> funcAsync, string instanceUrl, string accessToken, string targetUrl)
+        {
+            var urlWithAccessCode = GetUrlViaAccessToken(instanceUrl, accessToken, targetUrl);
+
+            var cookieContainer = new CookieContainer();
+            using (var handler = new HttpClientHandler() { CookieContainer = cookieContainer })
+            {
+                using (var httpClient = new HttpClient(handler))
+                {
+                    var htmlContent = await GetLoginWaitForRedirect(httpClient, instanceUrl, urlWithAccessCode, targetUrl).GoOn();
+                    return await funcAsync(httpClient, cookieContainer, htmlContent).GoOn();
+                }
+            }
         }
 
         public string Execute(string exeFileName)
@@ -223,46 +247,65 @@ namespace SF_DataExport
             return url;
         }
 
-        public async Task<string> WaitForRedirectAsync(HttpClient client, string instanceUrl, string htmlContent, string targetUrl)
+        public bool IsHtmlResponse(HttpResponseMessage response)
         {
+            return response.Content.Headers.TryGetValues("Content-Type", out var contentTypes) &&
+                contentTypes.Any(t => t.StartsWith("text/html"));
+        }
+
+        public async Task<string> GetLoginWaitForRedirect(HttpClient httpClient, string instanceUrl, string url, string targetUrl)
+        {
+            var response = await httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead).GoOn();
+
+            if (!IsHtmlResponse(response))
+            {
+                throw new InvalidOperationException();
+            }
+
+            var htmlContent = await response.Content.ReadAsStringAsync().GoOn();
             var expectedUrl = targetUrl.StartsWith(instanceUrl) ? targetUrl.Substring(instanceUrl.Length) : targetUrl;
+
             if (!htmlContent.Contains(expectedUrl))
             {
                 throw new InvalidOperationException();
             }
 
-            htmlContent = await client.GetStringAsync(targetUrl).GoOn();
-            var reg = new Regex(@"top\.window\.location\s*=\s*'([^']+)'");
-            var re = reg.Match(htmlContent);
+            var nextResponse = await httpClient.GetAsync(targetUrl).GoOn();
 
-            while (re.Success)
+            if (IsHtmlResponse(nextResponse))
             {
-                var url = re.Groups[1].Value;
-                if (url.StartsWith('/'))
+                var reg = new Regex(@"top\.window\.location\s*=\s*'([^']+)'");
+
+                htmlContent = await nextResponse.Content.ReadAsStringAsync().GoOn();
+                var re = reg.Match(htmlContent);
+
+                while (re.Success)
                 {
-                    url = instanceUrl + url;
+                    var regUrl = re.Groups[1].Value;
+                    if (regUrl.StartsWith('/'))
+                    {
+                        regUrl = instanceUrl + regUrl;
+                    }
+                    nextResponse = await httpClient.GetAsync(regUrl).GoOn();
+                    if (!IsHtmlResponse(nextResponse)) break;
+                    htmlContent = await response.Content.ReadAsStringAsync().GoOn();
+                    re = reg.Match(htmlContent);
                 }
-                htmlContent = await client.GetStringAsync(url).GoOn();
-                re = reg.Match(htmlContent);
             }
             return htmlContent;
         }
 
-        public async Task<string> GetDataUriViaAccessToken(string instanceUrl, string accessToken, string targetUrl, string mediaType)
+        public async Task<byte[]> GetBytesViaAccessTokenAsync(string instanceUrl, string accessToken, string targetUrl)//, string mediaType)
         {
             var url = GetUrlViaAccessToken(instanceUrl, accessToken, targetUrl);
-            if (string.IsNullOrEmpty(url)) return "";
+            if (string.IsNullOrEmpty(url)) return new byte[0];
 
-            var cookieContainer = new CookieContainer();
-            using (var handler = new HttpClientHandler() { CookieContainer = cookieContainer })
+            return await RunClientAsync(async (httpClient, cookieContainer, htmlContent) =>
             {
-                using (var client = new HttpClient(handler))
-                {
-                    var htmlContent = await client.GetStringAsync(url).GoOn();
-                    var bytes = await client.GetByteArrayAsync(targetUrl).GoOn();
-                    return string.Join("", "data:", mediaType, ";base64," + Convert.ToBase64String(bytes));
-                }
-            }
+                var bytes = await httpClient.GetByteArrayAsync(targetUrl).GoOn();
+                return bytes;
+                //return string.Join("", "data:", mediaType, ";base64," + Convert.ToBase64String(bytes));
+            }, instanceUrl, accessToken, targetUrl).GoOn();
         }
 
         public string GetContentType(string path)

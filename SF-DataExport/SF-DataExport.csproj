@@ -26,6 +26,8 @@
 
   <ItemGroup>
     <None Remove="res\images\material-icons.css" />
+    <None Remove="res\orgchart.css" />
+    <None Remove="res\orgchart.js" />
     <None Remove="res\vuetify.css" />
   </ItemGroup>
 

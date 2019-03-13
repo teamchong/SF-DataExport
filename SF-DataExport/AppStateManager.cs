@@ -1,25 +1,15 @@
-﻿using Newtonsoft.Json;
-using DotNetForce;
-using HtmlAgilityPack;
+﻿using DotNetForce;
 using Newtonsoft.Json.Linq;
 using PuppeteerSharp;
 using SF_DataExport.Dispatcher;
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.IO.Compression;
 using System.Linq;
-using System.Net;
-using System.Net.Http;
 using System.Reactive.Concurrency;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
-using System.Text.RegularExpressions;
-using System.Threading;
 using System.Threading.Tasks;
-using System.Web;
-using StringBuilder = System.Text.StringBuilder;
-using Unit = System.Reactive.Unit;
 
 namespace SF_DataExport
 {
@@ -56,24 +46,21 @@ namespace SF_DataExport
                 ["currentId"] = "",
                 ["currentInstanceUrl"] = "",
                 ["exportCount"] = null,
+                ["exportEmails"] = "",
                 ["exportPath"] = AppDomain.CurrentDomain.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar),
                 ["exportPathItems"] = new JArray(AppDomain.CurrentDomain.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar)),
                 ["exportResult"] = "",
                 ["exportResultFiles"] = new JArray(),
-                ["exportUserId"] = "",
                 ["isLoading"] = false,
                 ["showOrgModal"] = true,
                 ["showUserPopover"] = true,
                 ["orgSettingsPath"] = OrgSettings.GetDirectoryPath(),
                 ["orgSettingsPathItems"] = new JArray(OrgSettings.GetDirectoryPath()),
                 ["popoverUserId"] = "",
-                ["tab"] = "downloaddataexport", //"setup"
-                ["userDisplayName"] = "",
-                ["userEmail"] = "",
+                ["tab"] = "overview",//"downloaddataexport", //"setup"
                 ["userId"] = "",
-                ["userName"] = "",
-                ["userPicture"] = "",
-                ["userThumbnail"] = "",
+                ["userIdAs"] = "",
+                ["userRoles"] = new JObject(),
                 ["users"] = new JArray(),
             };
             State.Merge(GetOrgSettings(), MergeSettings);
@@ -87,26 +74,35 @@ namespace SF_DataExport
             {
                 case AppConstants.COMMAND_DOWNLOAD:
                     await Observable.Merge(
-                        Observable.Start(() => new DownloadExports().Dispatch(command, this, Resource, OrgSettings)).Select(_ => 0L),
-                        Observable.Start(() =>
+                        Observable.Defer(() =>
+                        {
+                            new DownloadExports().Dispatch(command, this, Resource, OrgSettings);
+                            return Observable.Empty<long>();
+                        }),
+                        Observable.Defer(() =>
                         {
                             var exportCount = (long?)State["exportCount"];
                             if (exportCount != null)
                             {
-                                var exportResultFiles = (JObject)State["exportResultFiles"];
-                                var pending = exportResultFiles.PropertyValues().Select(p => (string)p)
-                                    .Count(r => !r.StartsWith("Downloaded....") && !r.StartsWith("Skipped....") && !r.StartsWith("Failed...."));
-                                if (pending <= 0)
+                                var alertMessage = (string)State["alertMessage"];
+                                var exportResult = (string)State["exportResult"];
+
+                                if (!string.IsNullOrEmpty(alertMessage) || exportResult?.Contains("Export completed") == true)
                                 {
                                     return Observable.Throw<long>(new EndOfStreamException());
                                 }
                             }
                             return Observable.Timer(TimeSpan.FromSeconds(10));
-                        }).Concat().Repeat()
-                        .Catch((EndOfStreamException ex) => Observable.Empty<long>())
+                        }).Repeat()
                     )
-                    .Catch((Exception ex) => Observable.Start(() => Console.WriteLine(ex.ToString())).Select(_ => 0L))
-                    .Count();
+                    .Catch((EndOfStreamException ex) => Observable.Empty<long>())
+                    .Catch((Exception ex) => Observable.Defer(() =>
+                    {
+                        Console.WriteLine(ex.ToString());
+                        return Observable.Return(0L);
+                    }))
+                    .Count()
+                    .SubscribeOn(TaskPoolScheduler.Default);
                     return true;
             }
             return false;
@@ -216,7 +212,11 @@ namespace SF_DataExport
                     )
                 )
                 //.ScheduleTask();
-                .Catch((Exception ex) => Observable.Start(() => Console.WriteLine(ex.ToString())).SelectMany(__ => Observable.Empty<JSHandle>()))
+                .Catch((Exception ex) => Observable.Defer(() =>
+                {
+                    Console.WriteLine(ex.ToString());
+                    return Observable.Empty<JSHandle>();
+                }))
                 .Finally(() => Console.WriteLine("CommitSubject end unexpctedly."))
                 .Subscribe();
             //.SubscribeOn(TaskPoolScheduler.Default).Subscribe();
@@ -256,69 +256,74 @@ namespace SF_DataExport
             }
         }
 
+        public JArray GetOrgData(List<JObject> data, string dataParentRoleId)
+        {
+            var result = new JArray();
+            foreach (var row in data)
+            {
+                var id = row["Id"]?.ToString() ?? "";
+                var name = row["Name"]?.ToString() ?? "";
+                var parentRoleId = row["ParentRoleId"]?.ToString() ?? "";
+                if (parentRoleId == dataParentRoleId)
+                {
+                    var obj = new JObject
+                    {
+                        ["id"] = id,
+                        ["name"] = name,
+                    };
+                    var children = GetOrgData(data, id);
+                    if (children.Count > 0)
+                    {
+                        obj["children"] = children;
+                    }
+                    result.Add(obj);
+                }
+            }
+            return result;
+        }
+
         public void SetCurrentInstanceUrl(DNFClient client)
         {
             var userId = client.Id.Split('/').Last();
             Commit(new JObject
             {
                 ["currentInstanceUrl"] = client.InstanceUrl,
-                ["exportUserId"] = "",
                 ["popoverUserId"] = "",
                 ["showOrgModal"] = false,
-                ["userDisplayName"] = "",
-                ["userEmail"] = "",
                 ["userId"] = userId,
-                ["userName"] = "",
-                ["userPicture"] = "",
-                ["userThumbnail"] = "",
+                ["userIdAs"] = userId,
                 ["users"] = new JArray()
             });
-            Observable.Merge(
 
+            Observable.Merge(
                 Observable.FromAsync(async () =>
                 {
-                    var users = new JArray(await client.GetEnumerableAsync("SELECT Id,Name,Email FROM User WHERE IsActive=true ORDER BY Name,Email").GoOn());
                     if ((string)State["currentInstanceUrl"] != client.InstanceUrl)
                         throw new InvalidOperationException();
-                    Commit(new JObject { ["users"] = users });
+                    var data = (await client.GetEnumerableAsync("SELECT Id,Name,ParentRoleId FROM UserRole ORDER BY ParentRoleId,Name").GoOn()).ToList();
+                    var userRoles = new JObject
+                    {
+                        ["id"] = client.InstanceUrl,
+                        ["name"] = client.InstanceUrl.Replace("https://", ""),
+                        ["children"] = GetOrgData(data, ""),
+                    };
+                    if ((string)State["currentInstanceUrl"] != client.InstanceUrl)
+                        throw new InvalidOperationException();
+                    Commit(new JObject { ["userRoles"] = userRoles });
+                }),
+                Observable.FromAsync(async () =>
+                {
+                    if ((string)State["currentInstanceUrl"] != client.InstanceUrl)
+                        throw new InvalidOperationException();
+                    var users = new JArray(await client.GetEnumerableAsync("SELECT Id,Name,Username,Email,UserRole.Name,Profile.Name,FullPhotoUrl,SmallPhotoUrl FROM User WHERE IsActive=true ORDER BY Name,Email").GoOn());
+                    if ((string)State["currentInstanceUrl"] != client.InstanceUrl)
+                        throw new InvalidOperationException();
+                    var userProfiles = new JArray(users
+                        .Select(user => (string)user.SelectToken("Profile.Name") ?? "")
+                        .Where(r => !string.IsNullOrEmpty(r))
+                        .Distinct().OrderBy(r => r));
+                    Commit(new JObject { ["users"] = users, ["userProfiles"] = userProfiles });
                 })
-                .Catch(Observable.Empty<Unit>()),
-
-                Observable.FromAsync(() => client.UserInfo())
-                .SelectMany(userInfo => Observable.Merge(
-
-                    Observable.If(() => (string)State["currentInstanceUrl"] == client.InstanceUrl && (string)State["userId"] == userId,
-                        Observable.Start(() => Commit(new JObject
-                        {
-                            ["userDisplayName"] = userInfo?["display_name"],
-                            ["userEmail"] = userInfo?["email"],
-                            ["userName"] = userInfo?["username"],
-                        }))
-                        .Catch(Observable.Empty<Unit>()),
-                        Observable.Empty<Unit>()
-                    ),
-                    
-                    Observable.FromAsync(() => Resource.GetDataUriViaAccessToken(client.InstanceUrl, client.AccessToken,
-                        (string)userInfo?["photos"]?["picture"], "image/png"))
-                    .SelectMany(userPhoto =>
-                        Observable.If(
-                            () => (string)State["currentInstanceUrl"] == client.InstanceUrl && (string)State["userId"] == userId,
-                            Observable.Start(() => Commit(new JObject { ["userPicture"] = userPhoto })),
-                            Observable.Throw<Unit>(new InvalidOperationException())
-                        )
-                    ),
-
-                    Observable.FromAsync(() => Resource.GetDataUriViaAccessToken(client.InstanceUrl, client.AccessToken,
-                        (string)userInfo?["photos"]?["thumbnail"], "image/png"))
-                    .SelectMany(userPhoto =>
-                        Observable.If(
-                            () => (string)State["currentInstanceUrl"] == client.InstanceUrl && (string)State["userId"] == userId,
-                            Observable.Start(() => Commit(new JObject { ["userThumbnail"] = userPhoto })),
-                            Observable.Throw<Unit>(new InvalidOperationException())
-                        )
-                    )
-                ))
-
             )
             .ScheduleTask();
         }

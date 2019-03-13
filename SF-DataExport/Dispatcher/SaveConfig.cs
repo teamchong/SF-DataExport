@@ -46,7 +46,7 @@ namespace SF_DataExport.Dispatcher
                 }
                 return errorMessages;
             })
-            .Select(errorMessages => Observable.Start(() =>
+            .Select(errorMessages => Observable.Defer(() =>
             {
                 var message = string.Join(Environment.NewLine, errorMessages);
                 if (errorMessages.Count <= 0)
@@ -57,6 +57,7 @@ namespace SF_DataExport.Dispatcher
                 {
                     appState.Commit(new JObject { ["alertMessage"] = message, ["isLoading"] = false });
                 }
+                return Observable.Empty<Unit>();
             })).ScheduleTask();
         }
     }

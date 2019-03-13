@@ -64,8 +64,8 @@ namespace SF_DataExport.Dispatcher
                             catch (Exception ex)
                             {
                                 Console.WriteLine(ex.ToString());
-                                appState.Commit(new JObject { ["alertMessage"] = ex.Message, ["isLoading"] = false });
-                                return;
+                                //appState.Commit(new JObject { ["alertMessage"] = ex.Message, ["isLoading"] = false });
+                                //return;
                             }
                         }
                     }

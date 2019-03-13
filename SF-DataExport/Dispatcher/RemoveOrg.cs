@@ -43,15 +43,10 @@ namespace SF_DataExport.Dispatcher
                     appState.Commit(new JObject
                     {
                         ["currentInstanceUrl"] = "",
-                        ["exportUserId"] = "",
                         ["popoverUserId"] = "",
                         ["showOrgModal"] = true,
-                        ["userDisplayName"] = "",
-                        ["userEmail"] = "",
                         ["userId"] = "",
-                        ["userName"] = "",
-                        ["userPicture"] = "",
-                        ["userThumbnail"] = "",
+                        ["userIdAs"] = "",
                         ["users"] = new JArray()
                     });
                 }

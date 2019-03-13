@@ -1,10 +1,63 @@
 ﻿<script>
-    const { defer, interval, of, Subject, timer } = rxjs;
-    const { bufferTime, concat, concatMap, delayWhen, filter, ignoreElements, retryWhen, switchMap, takeWhile,  tap } = rxjs.operators;
+    //http://trendct.org/2016/01/22/how-to-choose-a-label-color-to-contrast-with-background/
+    //https://github.com/dabeng/OrgChart.js
+    //orgchart.default.install(Vue);
 
+    const { defer, interval, of, Subject, timer } = rxjs;
+    const { bufferTime, concat, concatMap, delayWhen, filter, ignoreElements, retryWhen, switchMap, takeWhile, tap } = rxjs.operators;
+
+    function userAs(state) {
+        const { userIdAs, users } = state;
+        for (let len = users.length, i = 0; i < len; i++) {
+            const user = users[i];
+            if (user.Id === userIdAs) return user;
+        }
+        return {};
+    }
+    function userDisplayName() {
+        return userAs(this.$store.state).Name || '';
+    }
+    function userEmail() {
+        return userAs(this.$store.state).Email || '';
+    }
     function userItems() {
         return this.$store.state.users.map(o => ({ text: o.Name + ' ' + o.Email, value: o.Id }));
-    };
+    }
+    function userName() {
+        return userAs(this.$store.state).Username || '';
+    }
+    function userPicture() {
+        return userAs(this.$store.state).FullPhotoUrl || '';
+    }
+    function userProfileName() {
+        return (userAs(this.$store.state).Profile || {}).Name || '';
+    }
+    function userRoleName() {
+        return (userAs(this.$store.state).UserRole || {}).Name || '';
+    }
+    function userThumbnail() {
+        return userAs(this.$store.state).SmallPhotoUrl || '';
+    }
+    function createOrgChart(id, org) {
+        new OrgChart({
+            'chartContainer': '#' + id,
+            'data': org,
+        });
+    }
+
+    Vue.component('org-chart', {
+        template: `<div :id="id"/>`,
+        props: ['id', 'org'],
+        mounted() {
+            createOrgChart(this.id, this.org);
+        },
+        watch: {
+            org(value) {
+                createOrgChart(this.id, value);
+            },
+        },
+    });
+
 
     const dispatch$ = new Subject();
     dispatch$.pipe(
@@ -24,7 +77,7 @@
         retryWhen(errors => errors.pipe(
             tap(err => {
                 store.commit('setStates', [{ isLoading: true }]);
-                console.log(err);
+                //console.log(err);
             }),
             delayWhen(val => timer(5000).pipe(tap(_ => {
                 store.commit('setStates', [{ isLoading: false }]);
@@ -49,11 +102,11 @@
         },
     });
 
-    const storeCommit = (newStates) => {
+    function storeCommit(newStates) {
         if (newStates && newStates.length) {
             store.commit('setStates', newStates);
         }
-    };
+    }
 
     Vue.config.devtools = true;
     Vue.filter('orgname', (value) => {
@@ -97,9 +150,6 @@
     });
 </script>
 
-
-
-
 <script type="text/x-template" id="v-modal-template">
     <div style="height: 640px;position:fixed;top:1em;">
         <section tabindex="-1" class="slds-modal slds-fade-in-open">
@@ -134,6 +184,72 @@
     });
 </script>
 
+<script type="text/x-template" id="overview-tab-template">
+    <div>
+        <div class="slds-page-header">
+            <div class="slds-page-header__row">
+                <div class="slds-page-header__col-title">
+                    <div class="slds-media">
+                        <div class="slds-media__figure">
+                            <span class="slds-icon_container slds-icon-standard-strategy" title="Overview">
+                                <svg class="slds-icon slds-page-header__icon">
+                                    <use xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="/assets/icons/standard-sprite/svg/symbols.svg#strategy" />
+                                </svg>
+                            </span>
+                        </div>
+                        <div class="slds-media__body">
+                            <div class="slds-page-header__name">
+                                <div class="slds-page-header__name-title">
+                                    <h1>
+                                        <span class="slds-page-header__title slds-truncate" title="Overview">Overview</span>
+                                    </h1>
+                                </div>
+                            </div><!--<p class="slds-page-header__name-meta">-</p>-->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div style="padding:1em;">
+            <org-chart id="chart-container" :org="userRoles" :zoom="true" :pan="true" :zoominLimit="1" :zoomoutLimit="0.1">
+                <template slot-scope="{ nodeData }">
+                    <article class="slds-card">
+                        <div class="slds-card__header slds-grid">
+                            <header class="slds-media slds-media_center slds-has-flexi-truncate">
+                                <div class="slds-media__figure">
+                                    <span class="slds-icon_container slds-icon-standard-account" :title="nodeData.name">
+                                        <svg class="slds-icon slds-icon_small" aria-hidden="true">
+                                            <use xlink:href="/assets/icons/standard-sprite/svg/symbols.svg#user_role"></use>
+                                        </svg>
+                                    </span>
+                                </div>
+                                <div class="slds-media__body">
+                                    <h2 class="slds-card__header-title">
+                                        <a href="javascript:void(0);" class="slds-card__header-link slds-truncate" :title="nodeData.name">
+                                            <span>{{nodeData.name}}</span>
+                                        </a>
+                                    </h2>
+                                </div>
+                            </header>
+                        </div>
+                        <div class="slds-card__body slds-card__body_inner">{{nodeData.name}}</div>
+                    </article>
+                </template>
+            </org-chart>
+        </div>
+    </div>
+</script>
+<script>
+    Vue.component('overview-tab', {
+        template: '#overview-tab-template',
+        computed: {
+            userRoles() {
+                //console.log({ userRoles: this.$store.state.userRoles });
+                return this.$store.state.userRoles;
+            },
+        },
+    });
+</script>
 
 <script type="text/x-template" id="download-dataexport-tab-template">
     <div>
@@ -166,19 +282,21 @@
         </div>
         <div v-if="currentInstanceUrl" style="padding:1em;">
 
+            <p>&nbsp;</p>
+            <p>&nbsp;</p>
+
             <div class="slds-form-element">
                 <div class="slds-clearfix">
-                    <label class="slds-form-element__label" for="text-input-id-1">Login As (Leave it blank to use current user)</label>
+                    <label class="slds-form-element__label" for="text-input-id-1">Email to (Optional, only send after completed/failed)</label>
                 </div>
                 <div class="slds-form-element__control" style="margin-top:0.1em;">
-                    <div :style="{visibility:!userItems.length?'visible':'hidden'}">
-                        <spinner class="slds-spinner_x-small" style="top:2em"></spinner>
+                    <div>
+                        <input class="slds-input" type="text" v-model="exportEmails"/>
                     </div>
-                    <v-autocomplete v-model="exportUserId" :auto-select-first="true" :items="userItems"
-                                    :clearable="true" placeholder="&lt;select salesforce user&gt;"
-                                    :class="[userItems.length?'':'hidden']"></v-autocomplete>
                 </div>
             </div>
+
+            <p>&nbsp;</p>
 
             <div class="slds-form-element">
                 <div class="slds-clearfix">
@@ -207,11 +325,11 @@
 
             <hr />
             <div class="slds-form-element">
-                <button class="slds-button slds-button_success" @click="dispatch('viewDownloadExports', {exportPath,instanceUrl:currentInstanceUrl,userId:exportUserId})">
+                <button class="slds-button slds-button_success" @click="dispatch('viewDownloadExports', {exportPath,instanceUrl:currentInstanceUrl,userId:userIdAs})">
                     View Page
                 </button>
 
-                <button class="slds-button slds-button_success" @click="dispatch('downloadExports', {exportPath,instanceUrl:currentInstanceUrl,userId:exportUserId})">
+                <button class="slds-button slds-button_success" @click="dispatch('downloadExports', {exportPath,instanceUrl:currentInstanceUrl,exportEmails})">
                     Download Now
                 </button>
             </div>
@@ -264,11 +382,16 @@
                     .replace(/^https:\/\/|\.my\.salesforce\.com$|\.salesforce\.com$/ig, '')
                     .replace(' ', '-')
                     .toLowerCase() : '';
-                const userId = this.exportUserId ? " -u " + this.exportUserId : "";
-                const exportPath = this.exportPath ? " -e \"" + this.exportPath + "\"" : "";
-                return this.$store.state.cmdExport + orgName + userId + exportPath;
+                const exportEmails = this.exportEmails ? " -email \"" + this.exportEmails + "\"" : "";
+                const exportPath = this.exportPath ? " -path \"" + this.exportPath + "\"" : "";
+                return this.$store.state.cmdExport + orgName + exportEmails + exportPath;
             },
             currentInstanceUrl() { return this.$store.state.currentInstanceUrl; },
+            exportEmails: {
+                get() { return this.$store.state.exportEmails; },
+                //set(value) { this.dispatch('exportEmails', (value || '').replace(/[ "'\r\n\t]/g,'').replace(/[;|&]/g, ',')); },
+                set(value) { this.dispatch('exportEmails', value); },
+            },
             exportPath: {
                 get() { return this.$store.state.exportPath; },
                 set(value) { this.dispatch('exportPath', value); },
@@ -281,7 +404,9 @@
                 for (const file in exportResultFiles) if (/^(?:Downloaded|Failed|Skipped)\.\.\./.test(exportResultFiles[file])) completed++;
                 return completed / exportCount * 100;
             },
-            exportResult() { return this.$store.state.exportResult; },
+            exportResult() {
+                return this.$store.state.exportResult;
+            },
             exportDownloaded() {
                 const { exportResultFiles } = this.$store.state;
                 let downloaded = 0;
@@ -305,10 +430,9 @@
                 const files = exportResultFiles ? Object.keys(exportResultFiles) : [];
                 return files.map(name => ({ name, result: exportResultFiles[name] }));
             },
-            exportUserId: {
-                get() { return this.$store.state.exportUserId; },
-                set(value) { this.dispatch('exportUserId', value); },
-            },
+            userDisplayName,
+            userEmail,
+            userIdAs() { return this.$store.state.userIdAs; },
             userItems,
         },
     });
@@ -445,11 +569,14 @@
             </li>
             <li style="margin:2em;">
                 <div class="slds-box">
+                    ss
                     <button class="slds-button slds-button_neutral" style="width:100%;padding:1em;font-size:150%;text-align:left" @click="dispatch('attemptLogin','test.salesforce.com')">
                         <button-iconleft type="standard" icon="default" class="slds-icon_large"></button-iconleft>
                         Sandbox (test.salesforce.com)
                     </button>
                 </div>
+                /d
+                /l
             </li>
             <!--<li style="margin:2em;">
                 <div class="slds-box">
@@ -507,11 +634,8 @@
     });
 </script>
 
-
-
-<div id="app">
+<script type="text/x-template" id="page-app-template">
     <v-app>
-
         <spinner class="slds-spinner_medium" v-if="isLoading"></spinner>
         <div class="slds-backdrop slds-backdrop_open" v-if="isLoading"></div>
 
@@ -591,8 +715,11 @@
                                             View
                                         </button>
                                     </div>
+                                    <div>
+                                        {{userRoleName}} <span v-if="userProfileName">({{userProfileName}})</span> &nbsp;
+                                    </div>
                                     <div v-if="userPicture">
-                                        <img :src="userPicture"/>
+                                        <img :src="userPicture" />
                                     </div>
                                 </div>
                             </div>
@@ -610,8 +737,19 @@
         <div style="margin-top:3.5rem;">
             <div class="slds-tabs_default">
                 <ul class="slds-tabs_default__nav" role="tablist">
+                    <li :class="['slds-tabs_default__item',tab=='overview'?'slds-is-active':'']" title="Overview">
+                        <a class="slds-tabs_default__link" href="javascript:void(0);" role="tab" tabindex="0" @click="dispatch('tab','overview')">
+                            <span class="slds-tabs__left-icon">
+                                <span class="slds-icon_container slds-icon-standard-strategy" title="Overview">
+                                    <svg class="slds-icon slds-icon_small">
+                                        <use xlink:href="/assets/icons/standard-sprite/svg/symbols.svg#strategy"></use>
+                                    </svg>
+                                </span>
+                            </span>Overview
+                        </a>
+                    </li>
                     <li :class="['slds-tabs_default__item',tab=='downloaddataexport'?'slds-is-active':'']" title="Download Data Export">
-                        <a class="slds-tabs_default__link" href="javascript:void(0);" role="tab" tabindex="0" id="tab-default-1__item" @click="dispatch('tab','downloaddataexport')">
+                        <a class="slds-tabs_default__link" href="javascript:void(0);" role="tab" tabindex="0" @click="dispatch('tab','downloaddataexport')">
                             <span class="slds-tabs__left-icon">
                                 <span class="slds-icon_container slds-icon-standard-folder" title="Download Data Export">
                                     <svg class="slds-icon slds-icon_small">
@@ -622,7 +760,7 @@
                         </a>
                     </li>
                     <li :class="['slds-tabs_default__item',tab=='setup'?'slds-is-active':'']" title="Setup">
-                        <a class="slds-tabs_default__link" href="javascript:void(0);" role="tab" tabindex="0" id="tab-default-2__item" @click="dispatch('tab','setup')">
+                        <a class="slds-tabs_default__link" href="javascript:void(0);" role="tab" tabindex="0" @click="dispatch('tab','setup')">
                             <span class="slds-tabs__left-icon">
                                 <span class="slds-icon_container slds-icon-standard-custom" title="Setup">
                                     <svg class="slds-icon slds-icon_small">
@@ -633,10 +771,13 @@
                         </a>
                     </li>
                 </ul>
-                <div id="tab-default-1" :class="['slds-tabs_default__content',tab=='downloaddataexport'?'slds-show':'slds-hide']" style="padding:1em;">
+                <div :class="['slds-tabs_default__content',tab=='overview'?'slds-show':'slds-hide']" style="padding:1em;">
+                    <overview-tab></overview-tab>
+                </div>
+                <div :class="['slds-tabs_default__content',tab=='downloaddataexport'?'slds-show':'slds-hide']" style="padding:1em;">
                     <download-dataexport-tab></download-dataexport-tab>
                 </div>
-                <div id="tab-default-2" :class="['slds-tabs_default__content',tab=='setup'?'slds-show':'slds-hide']" style="padding:1em;">
+                <div :class="['slds-tabs_default__content',tab=='setup'?'slds-show':'slds-hide']" style="padding:1em;">
                     <setup-tab></setup-tab>
                 </div>
             </div>
@@ -654,14 +795,15 @@
                 </span>
                 <h2>{{alertMessage}}</h2>
             </div>
-            <template #close-text>OK</template>
+            <template #close-text>
+                OK
+            </template>
         </v-modal>
     </v-app>
-</div>
+</script>
 <script>
-    const app = new Vue({
-        el: '#app',
-        store,
+    Vue.component('page-app', {
+        template: '#page-app-template',
         computed: {
             alertMessage() { return this.$store.state.alertMessage; },
             appPage() { return this.$store.state.appPage; },
@@ -676,16 +818,25 @@
             orgSettings() { return this.$store.state.orgSettings; },
             salesforceLogoUri() { return this.$store.state.salesforceLogoUri; },
             tab() { return this.$store.state.tab; },
-            userDisplayName() { return this.$store.state.userDisplayName; },
-            userEmail() { return this.$store.state.userEmail; },
-            userId() { return this.$store.state.userId; },
-            userName() { return this.$store.state.userName; },
-            userPicture() { return this.$store.state.userPicture; },
-            userThumbnail() { return this.$store.state.userThumbnail; },
+            userDisplayName,
+            userEmail,
+            userIdAs() { return this.$store.state.userIdAs; },
+            userName,
+            userPicture,
+            userProfileName,
+            userRoleName,
+            userThumbnail,
             users() { return this.$store.state.users; },
             userItems,
         },
     });
+</script>
 
+<div id="app"><page-app></page-app></div>
+<script>
+    const app = new Vue({
+        el: '#app',
+        store,
+    });
     store.state.dispatch$.next({ type: 'isLoading', payload: false });
 </script>

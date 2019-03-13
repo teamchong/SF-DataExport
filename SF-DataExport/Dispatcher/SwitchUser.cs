@@ -36,66 +36,23 @@ namespace SF_DataExport.Dispatcher
                 var targetUrl = resource.GetLoginUrlAs(instanceUrl, id, userId, "/");
                 var urlWithAccessCode = resource.GetUrlViaAccessToken(instanceUrl, accessToken, targetUrl);
 
-                var cookieContainer = new CookieContainer();
-                using (var handler = new HttpClientHandler() { CookieContainer = cookieContainer })
+                await resource.RunClientAsUserAsync((httpClient, cookieContainer, htmlContent) =>
                 {
-                    using (var httpClient = new HttpClient(handler))
+                    var cookies = cookieContainer.GetCookies(new Uri(instanceUrl));
+                    var newAccessToken = cookies["sid"]?.Value ?? "";
+                    if (newAccessToken != "")
+                    
                     {
-                        var domain = new Uri(instanceUrl).Host;
-                        var htmlContent = await httpClient.GetStringAsync(urlWithAccessCode).GoOn();
-                        htmlContent = await resource.WaitForRedirectAsync(httpClient, instanceUrl, htmlContent, targetUrl).GoOn();
-                        var cookies = cookieContainer.GetCookies(new Uri(instanceUrl));
-                        var newAccessToken = cookies["sid"]?.Value ?? "";
-                        if (newAccessToken != "")
+                        var newId = id.Remove(id.LastIndexOf('/') + 1) + userId;
+                        appState.Commit(new JObject
                         {
-                            var newId = id.Remove(id.LastIndexOf('/') + 1) + userId;
-                            appState.Commit(new JObject
-                            {
-                                ["currentAccessToken"] = newAccessToken,
-                                ["currentId"] = newId,
-                                ["userDisplayName"] = "",
-                                ["userEmail"] = "",
-                                ["userId"] = userId,
-                                ["userName"] = "",
-                                ["userPicture"] = "",
-                                ["userThumbnail"] = "",
-                            });
-                            var client = new DNFClient(instanceUrl, accessToken, refreshToken);
-                            Observable.FromAsync(() => client.UserInfo(newId))
-                            .SelectMany(userInfo => Observable.Merge(
-
-                                Observable.If(() => (string)appState.Value["currentInstanceUrl"] == client.InstanceUrl && (string)appState.Value["userId"] == userId,
-                                    Observable.Start(() => appState.Commit(new JObject
-                                    {
-                                        ["userDisplayName"] = userInfo?["display_name"],
-                                        ["userEmail"] = userInfo?["email"],
-                                        ["userName"] = userInfo?["username"],
-                                    }))
-                                    .Catch(Observable.Empty<Unit>()),
-                                    Observable.Empty<Unit>()
-                                ),
-                                
-                                Observable.FromAsync(() => resource.GetDataUriViaAccessToken(client.InstanceUrl, client.AccessToken,
-                                    (string)userInfo?["photos"]?["picture"], "image/png"))
-                                .SelectMany(userPhoto =>
-                                    Observable.If(() => (string)appState.Value["currentInstanceUrl"] == client.InstanceUrl && (string)appState.Value["userId"] == userId,
-                                        Observable.Start(() => appState.Commit(new JObject { ["userPicture"] = userPhoto })),
-                                        Observable.Throw<Unit>(new InvalidOperationException())
-                                    )
-                                ),
-
-                                Observable.FromAsync(() => resource.GetDataUriViaAccessToken(client.InstanceUrl, client.AccessToken,
-                                    (string)userInfo?["photos"]?["thumbnail"], "image/png"))
-                                .SelectMany(userPhoto =>
-                                    Observable.If(() => (string)appState.Value["currentInstanceUrl"] == client.InstanceUrl && (string)appState.Value["userId"] == userId,
-                                        Observable.Start(() => appState.Commit(new JObject { ["userThumbnail"] = userPhoto })),
-                                        Observable.Throw<Unit>(new InvalidOperationException())
-                                    )
-                                )
-                            )).ScheduleTask();
-                        }
+                            ["currentAccessToken"] = newAccessToken,
+                            ["currentId"] = newId,
+                            ["userIdAs"] = userId,
+                        });
                     }
-                }
+                    return Task.FromResult(0);
+                }, instanceUrl, accessToken, targetUrl, id, userId).GoOn();
             })
             .Finally(() => appState.Commit(new JObject { ["isLoading"] = false }))
             .ScheduleTask();

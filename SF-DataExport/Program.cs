@@ -30,8 +30,8 @@ namespace SF_DataExport
 
                     cliApp.Command(orgName, cliCfg =>
                     {
-                        var pathOpt = cliCfg.Option("-p", "Chrome executable path", CommandOptionType.SingleValue);
-                        var channelOpt = cliCfg.Option("-c", "Preferred Chrome Channel", CommandOptionType.SingleValue);
+                        var pathOpt = cliCfg.Option("-chromepath", "Chrome executable path", CommandOptionType.SingleValue);
+                        var channelOpt = cliCfg.Option("-chromechannel", "Preferred Chrome Channel", CommandOptionType.SingleValue);
                         cliCfg.OnExecute(async () =>
                         {
                             cliApp.ShowHelp();
@@ -44,10 +44,10 @@ namespace SF_DataExport
                     {
                         cliApp.Command("download@" + orgName, cliCfg =>
                         {
-                            var pathOpt = cliCfg.Option("-p", "Chrome executable path", CommandOptionType.SingleValue);
-                            var channelOpt = cliCfg.Option("-c", "Preferred Chrome Channel", CommandOptionType.SingleValue);
-                            var userOpt = cliCfg.Option("-u", "Salesforce User Id", CommandOptionType.SingleValue);
-                            var exportPathOpt = cliCfg.Option("-e", "Export to path", CommandOptionType.SingleValue);
+                            var pathOpt = cliCfg.Option("-chromepath", "Chrome executable path", CommandOptionType.SingleValue);
+                            var channelOpt = cliCfg.Option("-chromechannel", "Preferred Chrome Channel", CommandOptionType.SingleValue);
+                            var emailOpt = cliCfg.Option("-email", "Email to", CommandOptionType.SingleValue);
+                            var exportPathOpt = cliCfg.Option("-path", "Export to path", CommandOptionType.SingleValue);
                             cliCfg.OnExecute(async () =>
                             {
                                 await InitializeAsync(appSettings, pathOpt, channelOpt).GoOn();
@@ -55,7 +55,7 @@ namespace SF_DataExport
                                 {
                                     ["command"] = AppConstants.COMMAND_DOWNLOAD,
                                     ["instanceUrl"] = org.Name,
-                                    ["userId"] = userOpt.Value(),
+                                    ["exportEmails"] = emailOpt.Value(),
                                     ["exportPath"] = exportPathOpt.Value(),
                                 }).GoOn();
                             });
@@ -64,8 +64,8 @@ namespace SF_DataExport
                 }
 
                 {
-                    var pathOpt = cliApp.Option("-p", "Chrome executable path", CommandOptionType.SingleValue);
-                    var channelOpt = cliApp.Option("-c", "Preferred Chrome Channel", CommandOptionType.SingleValue);
+                    var pathOpt = cliApp.Option("-chromepath", "Chrome executable path", CommandOptionType.SingleValue);
+                    var channelOpt = cliApp.Option("-chromechannel", "Preferred Chrome Channel", CommandOptionType.SingleValue);
                     cliApp.OnExecute(async () =>
                     {
                         cliApp.ShowHelp();
@@ -80,7 +80,6 @@ namespace SF_DataExport
             {
                 Console.WriteLine(ex.Message);
             }
-            Console.ReadKey();
         }
 
         static async Task InitializeAsync(JsonConfig appSettings, CommandOption pathOpt, CommandOption channelOpt)
@@ -151,7 +150,7 @@ namespace SF_DataExport
             if (string.IsNullOrEmpty(appSettings.GetString(AppConstants.PATH_CHROME)))
             {
                 new ResourceManager().OpenBrowser("https://www.google.com/chrome");
-                throw new Exception("Cannot find chromium installation path, please specific the path using the -p <path> option.");
+                throw new Exception("Cannot find chromium installation path, please specific the path using the -chromepath <path> option.");
             }
 
             await AppDialog.CreateAsync(appSettings, orgSettings, new ResourceManager(), instanceUrl, command).GoOn();
