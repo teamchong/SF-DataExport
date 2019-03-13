@@ -1,8 +1,7 @@
 {
   "profiles": {
     "SF-DataExport": {
-      "commandName": "Project",
-      "commandLineArgs": "download@ubmasia -email \"steven.chong@ubm.com\" -path \"C:\\Users\\StevenChong\\source\\repos\\SF-DataExport\\SF-DataExport\\bin\\Debug\\netcoreapp2.2\""
+      "commandName": "Project"
     }
   }
 }
