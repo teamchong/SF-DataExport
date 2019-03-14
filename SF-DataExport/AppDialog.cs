@@ -125,7 +125,8 @@ namespace SF_DataExport
             {
                 Console.WriteLine(ex.ToString());
                 return Observable.Empty<Unit>();
-            }));
+            }))
+            .SubscribeOn(TaskPoolScheduler.Default);
         }
 
         void Page_Error(object sender, PuppeteerSharp.ErrorEventArgs e)
@@ -138,9 +139,9 @@ namespace SF_DataExport
             Console.WriteLine("PageError: " + e.Message);
         }
 
-        void Page_Console(object sender, ConsoleEventArgs e)
+        async void Page_Console(object sender, ConsoleEventArgs e)
         {
-            Observable.FromAsync(async () =>
+            await Observable.FromAsync(async () =>
             {
                 var messages = new List<string>();
                 if (e.Message.Args != null)
@@ -165,7 +166,8 @@ namespace SF_DataExport
                     "Line: " + e.Message.Location.LineNumber + "\n" +
                     "Column: " + e.Message.Location.ColumnNumber + "\n" +
                     (messages.Count > 0 ? string.Join(Environment.NewLine, messages) : ""));
-            }).Catch((Exception ex) => Observable.Empty<Unit>()).ScheduleTask();
+            }).Catch((Exception ex) => Observable.Empty<Unit>())
+            .SubscribeOn(TaskPoolScheduler.Default);
         }
 
         void Page_Response(object sender, ResponseCreatedEventArgs e)
@@ -173,7 +175,7 @@ namespace SF_DataExport
             Console.WriteLine("Response: " + e.Response?.Url);
         }
 
-        void Page_Request(object sender, RequestEventArgs e)
+        async void Page_Request(object sender, RequestEventArgs e)
         {
             var appPage = sender as Page;
             if (appPage == null) return;
@@ -182,7 +184,7 @@ namespace SF_DataExport
             {
                 case OAuth.REDIRECT_URI:
                 case OAuth.REDIRECT_URI_SANDBOX:
-                    Observable.FromAsync(() => appPage.SetRequestInterceptionAsync(true))
+                    await Observable.FromAsync(() => appPage.SetRequestInterceptionAsync(true))
                         .SelectMany(_ => PageInterception(appPage, () => e.Request.RespondAsync(new ResponseData
                         {
                             Status = HttpStatusCode.Created,
@@ -190,100 +192,100 @@ namespace SF_DataExport
                             Body = AppState.GetPageContent(),
                             Headers = new Dictionary<string, object> { ["Cache-Control"] = "no-store" },
                         }), e.Request))
-                        .ScheduleTask();
+                        .SubscribeOn(TaskPoolScheduler.Default);
                     break;
                 case var url when Resource.IsLoginUrl(url) && url.Contains(".salesforce.com/assets/icons/"):
                     var iconPath = "icons/" + e.Request.Url.Split(".salesforce.com/assets/icons/", 2).Last();
                     var icon = Resource.GetResourceBytes(iconPath);
                     if (icon != null)
-                        PageInterception(appPage, () => e.Request.RespondAsync(new ResponseData
+                        await PageInterception(appPage, () => e.Request.RespondAsync(new ResponseData
                         {
                             Status = HttpStatusCode.OK,
                             ContentType = Resource.GetContentType(iconPath),
                             BodyData = icon
-                        }), e.Request)
-                        .ScheduleTask();
+                        }), e.Request);
                     else
-                        PageInterception(appPage, () => e.Request.ContinueAsync(), e.Request).ScheduleTask();
+                        await PageInterception(appPage, () => e.Request.ContinueAsync(), e.Request);
                     break;
                 case var url when Resource.IsLoginUrl(url) && url.Contains(".salesforce.com/assets/images/"):
                     var imgPath = "images/" + e.Request.Url.Split(".salesforce.com/assets/images/", 2).Last();
                     var img = Resource.GetResourceBytes(imgPath);
                     if (img != null)
-                        PageInterception(appPage, () => e.Request.RespondAsync(new ResponseData
+                        await PageInterception(appPage, () => e.Request.RespondAsync(new ResponseData
                         {
                             Status = HttpStatusCode.OK,
                             ContentType = Resource.GetContentType(imgPath),
                             BodyData = img
-                        }), e.Request).ScheduleTask();
+                        }), e.Request);
                     else
-                        PageInterception(appPage, () => e.Request.ContinueAsync(), e.Request).ScheduleTask();
+                        await PageInterception(appPage, () => e.Request.ContinueAsync(), e.Request);
                     break;
                 case var url when Resource.IsLoginUrl(url) && url.Contains(".salesforce.com/fonts/"):
                     var fntPath = "fonts/" + e.Request.Url.Split(".salesforce.com/fonts/", 2).Last();
                     var fnt = Resource.GetResourceBytes(fntPath);
                     if (fnt != null)
-                        PageInterception(appPage, () => e.Request.RespondAsync(new ResponseData
+                        await PageInterception(appPage, () => e.Request.RespondAsync(new ResponseData
                         {
                             Status = HttpStatusCode.OK,
                             ContentType = Resource.GetContentType(fntPath),
                             BodyData = fnt
-                        }), e.Request).ScheduleTask();
+                        }), e.Request);
                     else
-                        PageInterception(appPage, () => e.Request.ContinueAsync(), e.Request).ScheduleTask();
+                        await PageInterception(appPage, () => e.Request.ContinueAsync(), e.Request);
                     break;
                 case var url when Resource.IsLoginUrl(url) && url.Count(c => c == '/') == 3 && !url.EndsWith('/'):
                     var path = e.Request.Url.Split('/').LastOrDefault();
                     var file = Resource.GetResource(path);
                     if (file != null)
-                        PageInterception(appPage, () => e.Request.RespondAsync(new ResponseData
+                        await PageInterception(appPage, () => e.Request.RespondAsync(new ResponseData
                         {
                             Status = HttpStatusCode.OK,
                             ContentType = Resource.GetContentType(path),
                             Body = file
-                        }), e.Request).ScheduleTask();
+                        }), e.Request);
                     else
-                        PageInterception(appPage, () => e.Request.ContinueAsync(), e.Request).ScheduleTask();
+                        await PageInterception(appPage, () => e.Request.ContinueAsync(), e.Request);
                     break;
                 case var url when url.Contains(".content.force.com/profilephoto/"):
-                    Observable.FromAsync(async () =>
+                    await Observable.FromAsync(async () =>
                     {
                         var instanceUrl = AppState.Value["currentInstanceUrl"]?.ToString();
                         if (string.IsNullOrEmpty(instanceUrl))
-                            PageInterception(appPage, () => e.Request.ContinueAsync(), e.Request).ScheduleTask();
+                            await PageInterception(appPage, () => e.Request.ContinueAsync(), e.Request);
                         else
                         {
                             var accessToken = (string)OrgSettings.Get(o => o[instanceUrl]?[OAuth.ACCESS_TOKEN]);
                             var bytes = await Resource.GetBytesViaAccessTokenAsync(instanceUrl, accessToken, e.Request.Url);
                             if (bytes?.LongLength > 0)
-                                PageInterception(appPage, () => e.Request.RespondAsync(new ResponseData
+                                await PageInterception(appPage, () => e.Request.RespondAsync(new ResponseData
                                 {
                                     Status = HttpStatusCode.OK,
                                     ContentType = "image/png",
                                     BodyData = bytes
-                                }), e.Request).ScheduleTask();
+                                }), e.Request);
                             else
-                                PageInterception(appPage, () => e.Request.ContinueAsync(), e.Request).ScheduleTask();
+                                await PageInterception(appPage, () => e.Request.ContinueAsync(), e.Request);
                         }
-                    }).ScheduleTask();
+                    })
+                    .SubscribeOn(TaskPoolScheduler.Default);
                     break;
                 case var url when !string.IsNullOrEmpty((string)AppState.Value["currentInstanceUrl"]) && url.StartsWith((string)AppState.Value["currentInstanceUrl"]):
                     Resource.OpenIncognitoBrowser((string)AppState.Value["currentInstanceUrl"],url.Substring(((string)AppState.Value["currentInstanceUrl"]).Length),
                         AppSettings, OrgSettings);
                     break;
                 default:
-                    PageInterception(appPage, () => e.Request.ContinueAsync(), e.Request).ScheduleTask();
+                    await PageInterception(appPage, () => e.Request.ContinueAsync(), e.Request);
                     break;
             }
         }
 
-        void Page_RequestFinished(object sender, RequestEventArgs e)
+        async void Page_RequestFinished(object sender, RequestEventArgs e)
         {
             var appPage = sender as Page;
             switch (appPage?.Target.Url)
             {
                 case var url when url.StartsWith(OAuth.REDIRECT_URI + "#") || url.StartsWith(OAuth.REDIRECT_URI_SANDBOX + "#"):
-                    Observable.FromAsync(async () =>
+                    await Observable.FromAsync(async () =>
                     {
                         var tokens = HttpUtility.ParseQueryString(url.Split(new[] { '#' }, 2).Last());
                         if (tokens.Count > 0)
@@ -367,7 +369,8 @@ namespace SF_DataExport
                             AppState.Commit(new JObject { [AppConstants.ACTION_REDIRECT] = redirectUrl });
                             return Observable.Empty<Unit>();
                         })
-                    ).Catch((Exception ex) => Observable.Empty<Unit>()).ScheduleTask();
+                    ).Catch((Exception ex) => Observable.Empty<Unit>())
+                    .SubscribeOn(TaskPoolScheduler.Default);
                     break;
                 case var url when url.StartsWith(OAuth.REDIRECT_URI + "?") || url.StartsWith(OAuth.REDIRECT_URI_SANDBOX + "?"):
                     AppState.Commit(new JObject { [AppConstants.ACTION_REDIRECT] = OAuth.REDIRECT_URI });
