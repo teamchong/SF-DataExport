@@ -41,7 +41,7 @@ namespace SF_DataExport
                 ["alertMessage"] = "",
                 ["chromePath"] = AppSettings.GetString(AppConstants.PATH_CHROME),
                 ["chromePathItems"] = new JArray(AppSettings.GetString(AppConstants.PATH_CHROME)),
-                ["cmdExport"] = "dotnet " + AppDomain.CurrentDomain.FriendlyName + ".dll download@",
+                ["cmdExport"] = AppDomain.CurrentDomain.FriendlyName + " download@",
                 ["currentAccessToken"] = "",
                 ["currentId"] = "",
                 ["currentInstanceUrl"] = "",
@@ -385,7 +385,7 @@ namespace SF_DataExport
             {
                 try
                 {
-                    var orgData = OrgSettings.Read();
+                    var orgData = OrgSettings.Get(d => d);
                     await File.WriteAllTextAsync(newFilePath, orgData.ToString()).GoOn();
                     try { File.Delete(oldFilePath); } catch { }
                     await AppSettings.SaveAysnc(o => o[AppConstants.PATH_ORG_SETTINGS] = newDirectoryPath).GoOn();

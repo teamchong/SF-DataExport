@@ -16,13 +16,14 @@ namespace SF_DataExport
         {
             try
             {
+                Console.WriteLine(AppDomain.CurrentDomain.FriendlyName + " v" + typeof(Program).Assembly.GetName().Version);
                 var appSettings = new JsonConfig(Path.Combine(AppContext.BaseDirectory, AppConstants.JSON_APP_SETTINGS));
                 var orgSettings = new JsonConfig(Path.Combine(GetOrgPath(appSettings).orgPath, AppConstants.JSON_ORG_SETTINGS));
 
                 var cliApp = new CommandLineApplication(false);
                 var replaceRex = new Regex(@"^https://|\.my\.salesforce\.com$|\.salesforce\.com$", RegexOptions.IgnoreCase);
 
-                foreach (var org in orgSettings.Read().Properties())
+                foreach (var org in orgSettings.Get(d => d.Properties()))
                 {
                     var orgName = replaceRex.Replace(org.Name, "")
                         .Replace(" ", "-").ToLower();
@@ -108,7 +109,7 @@ namespace SF_DataExport
                     }
                 }).GoOn();
             }
-            Console.WriteLine(AppConstants.JSON_APP_SETTINGS + ": " + appSettings.Read().ToString(0));
+            Console.WriteLine(AppConstants.JSON_APP_SETTINGS + ": " + appSettings.Get(d => d.ToString(0)));
         }
 
         static (string orgPath, string orgPathInConfig, string orgPathSave) GetOrgPath(JsonConfig appSettings)

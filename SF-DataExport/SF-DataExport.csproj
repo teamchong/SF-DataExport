@@ -12,6 +12,11 @@
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <ApplicationIcon>favicon.ico</ApplicationIcon>
     <StartupObject />
+    <Version>1.0.1</Version>
+    <RepositoryUrl>https://github.com/ste80/sf-dataexport</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageProjectUrl>https://github.com/ste80/sf-dataexport</PackageProjectUrl>
+    <Description>Tool for download export data from salesforce.</Description>
   </PropertyGroup>
 
   <ItemGroup>

@@ -732,7 +732,6 @@
         <hr />
         <div class="slds-form-element">
             <div class="slds-clearfix">
-                as
                 <div class="slds-float_right">
                     <button class="slds-button slds-button_success" @click="dispatch('setOrgSettingsPath',orgSettingsPath)">Save path</button>
                 </div>
@@ -741,7 +740,6 @@
             <div class="slds-form-element__control" style="margin-top:0.1em;">
                 <v-autocomplete v-model="orgSettingsPath" :items="orgSettingsPathItems"
                                 id="text-input-id-1" :search-input.sync="fetchOrgSettingsPath"></v-autocomplete>
-                oc
             </div>
         </div>
     </v-modal>

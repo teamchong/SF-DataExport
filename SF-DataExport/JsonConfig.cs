@@ -10,20 +10,25 @@ namespace SF_DataExport
 {
     public class JsonConfig
     {
+        JObject Data { get; set; }
         string JsonFilePath { get; set; }
 
         public JsonConfig(string jsonFilePath)
         {
             JsonFilePath = jsonFilePath;
+            Data = ReadFile();
         }
 
         public string GetFilePath() => JsonFilePath;
 
         public string GetDirectoryPath() => Path.GetDirectoryName(JsonFilePath).TrimEnd(Path.DirectorySeparatorChar);
 
-        public void SetPath(string jsonFilePath) => JsonFilePath = jsonFilePath;
+        public void SetPath(string jsonFilePath) {
+            JsonFilePath = jsonFilePath;
+            Data = ReadFile();
+        }
 
-        public JObject Read()
+        JObject ReadFile()
         {
             var json = new JObject();
             try
@@ -42,17 +47,17 @@ namespace SF_DataExport
 
         public string[] List()
         {
-            return Read().Properties().Select(p => p.Name).ToArray();
+            return Data.Properties().Select(p => p.Name).ToArray();
         }
 
         public T Get<T>(Func<JObject, T> getter)
         {
-            return getter(Read());
+            return getter(Data);
         }
 
         public string GetString(string name)
         {
-            return (string)Read()[name] ?? "";
+            return (string)Data[name] ?? "";
         }
 
         public Task SaveAysnc()
@@ -62,9 +67,8 @@ namespace SF_DataExport
 
         public async Task SaveAysnc(Action<JObject> setter)
         {
-            var json = Read();
-            setter(json);
-            await File.WriteAllTextAsync(JsonFilePath, json.ToString()).GoOn();
+            setter(Data);
+            await File.WriteAllTextAsync(JsonFilePath, Data.ToString()).GoOn();
         }
     }
 }
