@@ -26,6 +26,7 @@ namespace SF_DataExport
         JsonConfig OrgSettings { get; set; }
         AppStateManager AppState { get; set; }
         Page AppPage { get; set; }
+        bool IsRequestInterception { get; set; }
 
         public static async Task<AppDialog> CreateAsync(JsonConfig appSettings, JsonConfig orgSettings, ResourceManager resource,
             string instanceUrl, JObject command)
@@ -118,13 +119,17 @@ namespace SF_DataExport
                 if (request.Method != HttpMethod.Get)
                 {
                     await appPage.SetRequestInterceptionAsync(false).GoOn();
+                    IsRequestInterception = false;
                 }
-                await funcAsync().GoOn();
+                else if (IsRequestInterception)
+                {
+                    await funcAsync().GoOn();
+                }
             })
             .Catch((Exception ex) => Observable.Defer(() =>
             {
                 Console.WriteLine(ex.ToString());
-                return Observable.Empty<Unit>();
+                return Observable.Return(Unit.Default);
             }))
             .SubscribeOn(TaskPoolScheduler.Default);
         }
@@ -166,7 +171,7 @@ namespace SF_DataExport
                     "Line: " + e.Message.Location.LineNumber + "\n" +
                     "Column: " + e.Message.Location.ColumnNumber + "\n" +
                     (messages.Count > 0 ? string.Join(Environment.NewLine, messages) : ""));
-            }).Catch((Exception ex) => Observable.Empty<Unit>())
+            }).Catch((Exception ex) => Observable.Return(Unit.Default))
             .SubscribeOn(TaskPoolScheduler.Default);
         }
 
@@ -184,7 +189,11 @@ namespace SF_DataExport
             {
                 case OAuth.REDIRECT_URI:
                 case OAuth.REDIRECT_URI_SANDBOX:
-                    await Observable.FromAsync(() => appPage.SetRequestInterceptionAsync(true))
+                    await Observable.FromAsync(async () =>
+                    {
+                        await appPage.SetRequestInterceptionAsync(true).GoOn();
+                        IsRequestInterception = true;
+                    })
                         .SelectMany(_ => PageInterception(appPage, () => e.Request.RespondAsync(new ResponseData
                         {
                             Status = HttpStatusCode.Created,
@@ -270,7 +279,7 @@ namespace SF_DataExport
                     .SubscribeOn(TaskPoolScheduler.Default);
                     break;
                 case var url when !string.IsNullOrEmpty((string)AppState.Value["currentInstanceUrl"]) && url.StartsWith((string)AppState.Value["currentInstanceUrl"]):
-                    Resource.OpenIncognitoBrowser((string)AppState.Value["currentInstanceUrl"],url.Substring(((string)AppState.Value["currentInstanceUrl"]).Length),
+                    Resource.OpenIncognitoBrowser((string)AppState.Value["currentInstanceUrl"], url.Substring(((string)AppState.Value["currentInstanceUrl"]).Length),
                         AppSettings, OrgSettings);
                     break;
                 default:
@@ -367,9 +376,9 @@ namespace SF_DataExport
                         Observable.Defer(() =>
                         {
                             AppState.Commit(new JObject { [AppConstants.ACTION_REDIRECT] = redirectUrl });
-                            return Observable.Empty<Unit>();
+                            return Observable.Return(Unit.Default);
                         })
-                    ).Catch((Exception ex) => Observable.Empty<Unit>())
+                    ).Catch((Exception ex) => Observable.Return(Unit.Default))
                     .SubscribeOn(TaskPoolScheduler.Default);
                     break;
                 case var url when url.StartsWith(OAuth.REDIRECT_URI + "?") || url.StartsWith(OAuth.REDIRECT_URI_SANDBOX + "?"):
