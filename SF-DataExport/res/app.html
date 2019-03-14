@@ -1,11 +1,82 @@
 ﻿<script>
     //http://trendct.org/2016/01/22/how-to-choose-a-label-color-to-contrast-with-background/
-    //https://github.com/dabeng/OrgChart.js
-    //orgchart.default.install(Vue);
 
     const { defer, interval, of, Subject, timer } = rxjs;
     const { bufferTime, concat, concatMap, delayWhen, filter, ignoreElements, retryWhen, switchMap, takeWhile, tap } = rxjs.operators;
 
+    function createOrgChart(id, data) {
+        const node = document.getElementById(id);
+        removeChilds(node);
+        new OrgChart({
+            chartContainer: '#' + id,
+            createNode(node, data) {
+                createOrgNode(node, data);
+            },
+            data,
+            direction: 'l2r',
+            nodeContent: 'name',
+            nodeTitle: '_',
+            pan: true,
+            parentNodeSymbol: '',
+        });
+    }
+    function removeChilds(node) {
+        if (node) {
+            let lastContent;
+            while (lastContent = node.lastChild) node.removeChild(lastContent);
+        }
+    }
+    function createOrgNode(node, { name, users, url }) {
+        const rLen = (users || []).length || 0;
+
+        const titleDiv = node.querySelector('.title');
+        if (titleDiv) titleDiv.innerHTML = rLen ? ['<i class="material-icons">group</i> (', rLen, ')'].join('') : '';
+
+        const contentDiv = node.querySelector('.content');
+        if (contentDiv) {
+            removeChilds(contentDiv);
+            const orgLink = document.createElement('a');
+            orgLink.href = url;
+            orgLink.innerText = name;
+            orgLink.title = name;
+            contentDiv.appendChild(orgLink);
+        }
+
+        const container = document.createDocumentFragment();
+
+        if (rLen) {
+            const userPanel = document.createElement('div');
+            userPanel.className = 'users';
+
+            for (let r = 0; r < rLen; r++) {
+                const { Name, SmallPhotoUrl, Url } = users[r];
+                const a = document.createElement('a');
+                a.href = Url || 'javascript:void(0)';
+                a.innerText = Name;
+                a.className = 'slds-truncate';
+                a.title = Name;
+                a.style.backgroundImage = 'url(' + SmallPhotoUrl + ')';
+                userPanel.appendChild(a);
+            }
+
+            container.appendChild(userPanel);
+        }
+        const usersDiv = node.querySelector('.users');
+        if (usersDiv) {
+            removeChilds(usersDiv);
+            usersDiv.appendChild(container);
+        } else {
+            node.appendChild(container);
+        }
+
+        node.removeEventListener('mouseover', userMouseOver);
+        node.removeEventListener('mouseout', userMouseOut);
+        node.addEventListener('mouseover', userMouseOver);
+        node.addEventListener('mouseout', userMouseOut);
+    }
+    function htmlEncode(val) {
+        return (val || '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;').replace('"', '&quot;');
+    }
     function userAs(state) {
         const { userIdAs, users } = state;
         for (let len = users.length, i = 0; i < len; i++) {
@@ -23,6 +94,12 @@
     function userItems() {
         return this.$store.state.users.map(o => ({ text: o.Name + ' ' + o.Email, value: o.Id }));
     }
+    function userMouseOver({ currentTarget }) {
+        currentTarget.classList.add('hover');
+    }
+    function userMouseOut({ currentTarget }) {
+        currentTarget.classList.remove('hover');
+    }
     function userName() {
         return userAs(this.$store.state).Username || '';
     }
@@ -38,21 +115,16 @@
     function userThumbnail() {
         return userAs(this.$store.state).SmallPhotoUrl || '';
     }
-    function createOrgChart(id, org) {
-        new OrgChart({
-            'chartContainer': '#' + id,
-            'data': org,
-        });
-    }
+
 
     Vue.component('org-chart', {
         template: `<div :id="id"/>`,
-        props: ['id', 'org'],
+        props: ['id', 'data'],
         mounted() {
-            createOrgChart(this.id, this.org);
+            createOrgChart(this.id, this.data);
         },
         watch: {
-            org(value) {
+            data(value) {
                 createOrgChart(this.id, value);
             },
         },
@@ -77,7 +149,6 @@
         retryWhen(errors => errors.pipe(
             tap(err => {
                 store.commit('setStates', [{ isLoading: true }]);
-                //console.log(err);
             }),
             delayWhen(val => timer(5000).pipe(tap(_ => {
                 store.commit('setStates', [{ isLoading: false }]);
@@ -113,12 +184,19 @@
         if (!value) return ''
         return value.replace(/^https:\/\/|\.my\.salesforce\.com$|\.salesforce\.com$/ig, '').toUpperCase();
     });
+    Vue.filter('round', (value, dcp) => {
+        return Math.round(value, dcp);
+    });
     Vue.filter('empty', (value, emptyValue) => {
         return value || emptyValue || '';
     });
     Vue.mixin({
         methods: {
             dispatch(type, payload) { return this.$store.state.dispatch$.next({ type, payload }); },
+            percent(a, b) {
+                if (!b) return 0;
+                return 100.0 * a / b;
+            },
             orgHasOfflineAccess(org) { return this.$store.state.orgOfflineAccess.indexOf(org) >= 0; },
             orgIsSandbox(org) { return this.$store.state.orgSandboxes.indexOf(org) >= 0; },
         },
@@ -210,32 +288,12 @@
                 </div>
             </div>
         </div>
-        <div style="padding:1em;">
-            <org-chart id="chart-container" :org="userRoles" :zoom="true" :pan="true" :zoominLimit="1" :zoomoutLimit="0.1">
-                <template slot-scope="{ nodeData }">
-                    <article class="slds-card">
-                        <div class="slds-card__header slds-grid">
-                            <header class="slds-media slds-media_center slds-has-flexi-truncate">
-                                <div class="slds-media__figure">
-                                    <span class="slds-icon_container slds-icon-standard-account" :title="nodeData.name">
-                                        <svg class="slds-icon slds-icon_small" aria-hidden="true">
-                                            <use xlink:href="/assets/icons/standard-sprite/svg/symbols.svg#user_role"></use>
-                                        </svg>
-                                    </span>
-                                </div>
-                                <div class="slds-media__body">
-                                    <h2 class="slds-card__header-title">
-                                        <a href="javascript:void(0);" class="slds-card__header-link slds-truncate" :title="nodeData.name">
-                                            <span>{{nodeData.name}}</span>
-                                        </a>
-                                    </h2>
-                                </div>
-                            </header>
-                        </div>
-                        <div class="slds-card__body slds-card__body_inner">{{nodeData.name}}</div>
-                    </article>
-                </template>
-            </org-chart>
+        <div style="padding:1em;position:relative;">
+            <org-chart id="chart-container" :data="data" v-if="currentInstanceUrl && (data.children && data.children.length)"></org-chart>
+            <spinner class="slds-spinner_medium" style="margin-top:2em;" v-if="currentInstanceUrl && (!data.children || !data.children.length)"></spinner>
+            <div v-if="!currentInstanceUrl" style="padding:5em;">
+                <a href="javascript:void(0)" @click="dispatch('showOrgModal',true)">click here to login your organization.</a>
+            </div>
         </div>
     </div>
 </script>
@@ -243,9 +301,91 @@
     Vue.component('overview-tab', {
         template: '#overview-tab-template',
         computed: {
-            userRoles() {
-                //console.log({ userRoles: this.$store.state.userRoles });
+            currentInstanceUrl() {
+                return this.$store.state.currentInstanceUrl;
+            },
+            data() {
                 return this.$store.state.userRoles;
+            },
+        },
+    });
+</script>
+
+<script type="text/x-template" id="limits-tab-template">
+    <div>
+        <div class="slds-page-header">
+            <div class="slds-page-header__row">
+                <div class="slds-page-header__col-title">
+                    <div class="slds-media">
+                        <div class="slds-media__figure">
+                            <span class="slds-icon_container slds-icon-standard-poll" title="Org Limits">
+                                <svg class="slds-icon slds-page-header__icon">
+                                    <use xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="/assets/icons/standard-sprite/svg/symbols.svg#poll" />
+                                </svg>
+                            </span>
+                        </div>
+                        <div class="slds-media__body">
+                            <div class="slds-page-header__name">
+                                <div class="slds-page-header__name-title">
+                                    <h1>
+                                        <span class="slds-page-header__title slds-truncate" title="Org Limits">Org Limits</span>
+                                    </h1>
+                                </div>
+                            </div><!--<p class="slds-page-header__name-meta">-</p>-->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div style="padding:1em;position:relative;">
+            <div v-if="currentInstanceUrl">
+
+                <div v-for="value in userLicenses">
+                    <div class="slds-grid slds-grid_align-spread slds-p-bottom_x-small" id="progress-bar-label-id-1">
+                        <span>{{value.Name}} ( {{value.TotalLicenses-value.UsedLicenses}} of {{value.TotalLicenses}} left)</span>
+                        <span aria-hidden="true">
+                            <strong>{{percent(value.UsedLicenses,value.TotalLicenses)|round(2)}}%</strong>
+                        </span>
+                    </div>
+                    <div class="slds-progress-bar slds-progress-bar_circular">
+                        <span class="slds-progress-bar__value" :style="{width:percent(value.UsedLicenses,value.TotalLicenses)+'%',background:percent(value.UsedLicenses,value.TotalLicenses)>90?'red':percent(value.UsedLicenses,value.TotalLicenses)>70?'orange':''}"></span>
+                    </div>
+                    <p>&nbsp;</p>
+                </div>
+
+                <div v-for="(value, key) in orgLimits">
+                    <div class="slds-grid slds-grid_align-spread slds-p-bottom_x-small" id="progress-bar-label-id-1">
+                        <span>{{key}} ( {{value.Remaining}} of {{value.Max}} left)</span>
+                        <span aria-hidden="true">
+                            <strong>{{percent(value.Max-value.Remaining,value.Max)|round(2)}}%</strong>
+                        </span>
+                    </div>
+                    <div class="slds-progress-bar slds-progress-bar_circular">
+                        <span class="slds-progress-bar__value" :style="{width:percent(value.Max-value.Remaining,value.Max)+'%',background:percent(value.Max-value.Remaining,value.Max)>90?'red':percent(value.Max-value.Remaining,value.Max)>70?'orange':''}"></span>
+                    </div>
+                    <p>&nbsp;</p>
+                </div>
+
+            </div>
+            <spinner class="slds-spinner_medium" style="margin-top:2em;" v-if="currentInstanceUrl && !Object.keys(orgLimits).length"></spinner>
+            <div v-if="!currentInstanceUrl" style="padding:5em;">
+                <a href="javascript:void(0)" @click="dispatch('showOrgModal',true)">click here to login your organization.</a>
+            </div>
+        </div>
+    </div>
+</script>
+<script>
+    Vue.component('limits-tab', {
+        template: '#limits-tab-template',
+        computed: {
+            currentInstanceUrl() {
+                return this.$store.state.currentInstanceUrl;
+            },
+            orgLimits() {
+                return this.$store.state.orgLimits;
+            },
+            userLicenses() {
+                return this.$store.state.userLicenses;
             },
         },
     });
@@ -277,9 +417,6 @@
                 </div>
             </div>
         </div>
-        <div v-if="!currentInstanceUrl" style="padding:5em;">
-            <a href="javascript:void(0)" @click="dispatch('showOrgModal',true)">click here to login your organization.</a>
-        </div>
         <div v-if="currentInstanceUrl" style="padding:1em;">
 
             <p>&nbsp;</p>
@@ -291,7 +428,7 @@
                 </div>
                 <div class="slds-form-element__control" style="margin-top:0.1em;">
                     <div>
-                        <input class="slds-input" type="text" v-model="exportEmails"/>
+                        <input class="slds-input" type="text" v-model="exportEmails" />
                     </div>
                 </div>
             </div>
@@ -358,6 +495,9 @@
                     </li>
                 </ul>
             </div>
+        </div>
+        <div v-if="!currentInstanceUrl" style="padding:5em;">
+            <a href="javascript:void(0)" @click="dispatch('showOrgModal',true)">click here to login your organization.</a>
         </div>
     </div>
 </script>
@@ -595,6 +735,7 @@
         <hr />
         <div class="slds-form-element">
             <div class="slds-clearfix">
+                as
                 <div class="slds-float_right">
                     <button class="slds-button slds-button_success" @click="dispatch('setOrgSettingsPath',orgSettingsPath)">Save path</button>
                 </div>
@@ -603,6 +744,7 @@
             <div class="slds-form-element__control" style="margin-top:0.1em;">
                 <v-autocomplete v-model="orgSettingsPath" :items="orgSettingsPathItems"
                                 id="text-input-id-1" :search-input.sync="fetchOrgSettingsPath"></v-autocomplete>
+                oc
             </div>
         </div>
     </v-modal>
@@ -709,11 +851,10 @@
                                                 :disabled="!popoverUserId">
                                             Login As
                                         </button>
-                                        <button class="slds-button slds-button_neutral"
-                                                @click="dispatch('viewUserPage',{instanceUrl:currentInstanceUrl,userId:popoverUserId})"
-                                                :disabled="!popoverUserId">
+                                        <a class="slds-button slds-button_neutral" :href="currentInstanceUrl+'/'+popoverUserId+'?noredirect=1'"
+                                           :disabled="!popoverUserId">
                                             View
-                                        </button>
+                                        </a>
                                     </div>
                                     <div>
                                         {{userRoleName}} <span v-if="userProfileName">({{userProfileName}})</span> &nbsp;
@@ -748,6 +889,17 @@
                             </span>Overview
                         </a>
                     </li>
+                    <li :class="['slds-tabs_default__item',tab=='limits'?'slds-is-active':'']" title="Org Limits">
+                        <a class="slds-tabs_default__link" href="javascript:void(0);" role="tab" tabindex="0" @click="dispatch('tab','limits')">
+                            <span class="slds-tabs__left-icon">
+                                <span class="slds-icon_container slds-icon-standard-poll" title="Org Limits">
+                                    <svg class="slds-icon slds-icon_small">
+                                        <use xlink:href="/assets/icons/standard-sprite/svg/symbols.svg#poll"></use>
+                                    </svg>
+                                </span>
+                            </span>Org Limits
+                        </a>
+                    </li>
                     <li :class="['slds-tabs_default__item',tab=='downloaddataexport'?'slds-is-active':'']" title="Download Data Export">
                         <a class="slds-tabs_default__link" href="javascript:void(0);" role="tab" tabindex="0" @click="dispatch('tab','downloaddataexport')">
                             <span class="slds-tabs__left-icon">
@@ -773,6 +925,9 @@
                 </ul>
                 <div :class="['slds-tabs_default__content',tab=='overview'?'slds-show':'slds-hide']" style="padding:1em;">
                     <overview-tab></overview-tab>
+                </div>
+                <div :class="['slds-tabs_default__content',tab=='limits'?'slds-show':'slds-hide']" style="padding:1em;">
+                    <limits-tab></limits-tab>
                 </div>
                 <div :class="['slds-tabs_default__content',tab=='downloaddataexport'?'slds-show':'slds-hide']" style="padding:1em;">
                     <download-dataexport-tab></download-dataexport-tab>
@@ -809,13 +964,13 @@
             appPage() { return this.$store.state.appPage; },
             currentInstanceUrl() { return this.$store.state.currentInstanceUrl; },
             isLoading() { return this.$store.state.isLoading; },
+            orgSettings() { return this.$store.state.orgSettings; },
             popoverUserId: {
                 get() { return this.$store.state.popoverUserId; },
                 set(value) { this.dispatch('popoverUserId', value); },
             },
             showOrgModal() { return this.$store.state.showOrgModal; },
             showUserPopover() { return this.$store.state.showUserPopover; },
-            orgSettings() { return this.$store.state.orgSettings; },
             salesforceLogoUri() { return this.$store.state.salesforceLogoUri; },
             tab() { return this.$store.state.tab; },
             userDisplayName,
@@ -826,7 +981,6 @@
             userProfileName,
             userRoleName,
             userThumbnail,
-            users() { return this.$store.state.users; },
             userItems,
         },
     });

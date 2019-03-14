@@ -30,7 +30,7 @@ namespace SF_DataExport.Dispatcher
             var accessToken = (string)orgSettings.Get(o => o[instanceUrl]?[OAuth.ACCESS_TOKEN]) ?? "";
             var targetUrl = instanceUrl + "/" + userId + "?noredirect=1";
             var urlWithAccessCode = resource.GetUrlViaAccessToken(instanceUrl, accessToken, targetUrl);
-            resource.OpenBrowserIncognito(urlWithAccessCode, appSettings.GetString(AppConstants.PATH_CHROME));
+            resource.OpenIncognitoBrowser(urlWithAccessCode, appSettings.GetString(AppConstants.PATH_CHROME));
         }
     }
 }

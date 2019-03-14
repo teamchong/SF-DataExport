@@ -75,7 +75,7 @@ namespace SF_DataExport
             launchOpts.Headless = !string.IsNullOrEmpty(command);
             launchOpts.DefaultViewport = null;
             launchOpts.IgnoreHTTPSErrors = true;
-            launchOpts.DumpIO = true;
+            launchOpts.DumpIO = false;
             launchOpts.Args = new string[] { string.Join(" ", new [] {
                 $"--force-app-mode",
                 $"--disable-extensions",
@@ -165,12 +165,12 @@ namespace SF_DataExport
                     "Line: " + e.Message.Location.LineNumber + "\n" +
                     "Column: " + e.Message.Location.ColumnNumber + "\n" +
                     (messages.Count > 0 ? string.Join(Environment.NewLine, messages) : ""));
-            }).ScheduleTask();
+            }).Catch((Exception ex) => Observable.Empty<Unit>()).ScheduleTask();
         }
 
         void Page_Response(object sender, ResponseCreatedEventArgs e)
         {
-            Console.WriteLine("Response: " + e.Response.Url);
+            Console.WriteLine("Response: " + e.Response?.Url);
         }
 
         void Page_Request(object sender, RequestEventArgs e)
@@ -183,13 +183,13 @@ namespace SF_DataExport
                 case OAuth.REDIRECT_URI:
                 case OAuth.REDIRECT_URI_SANDBOX:
                     Observable.FromAsync(() => appPage.SetRequestInterceptionAsync(true))
-                    .SelectMany(_ => PageInterception(appPage, () => e.Request.RespondAsync(new ResponseData
-                    {
-                        Status = HttpStatusCode.Created,
-                        ContentType = "text/html",
-                        Body = AppState.GetPageContent(),
-                        Headers = new Dictionary<string, object> { ["Cache-Control"] = "no-store" },
-                    }), e.Request))
+                        .SelectMany(_ => PageInterception(appPage, () => e.Request.RespondAsync(new ResponseData
+                        {
+                            Status = HttpStatusCode.Created,
+                            ContentType = "text/html",
+                            Body = AppState.GetPageContent(),
+                            Headers = new Dictionary<string, object> { ["Cache-Control"] = "no-store" },
+                        }), e.Request))
                         .ScheduleTask();
                     break;
                 case var url when Resource.IsLoginUrl(url) && url.Contains(".salesforce.com/assets/icons/"):
@@ -201,7 +201,8 @@ namespace SF_DataExport
                             Status = HttpStatusCode.OK,
                             ContentType = Resource.GetContentType(iconPath),
                             BodyData = icon
-                        }), e.Request).ScheduleTask();
+                        }), e.Request)
+                        .ScheduleTask();
                     else
                         PageInterception(appPage, () => e.Request.ContinueAsync(), e.Request).ScheduleTask();
                     break;
@@ -265,6 +266,10 @@ namespace SF_DataExport
                                 PageInterception(appPage, () => e.Request.ContinueAsync(), e.Request).ScheduleTask();
                         }
                     }).ScheduleTask();
+                    break;
+                case var url when !string.IsNullOrEmpty((string)AppState.Value["currentInstanceUrl"]) && url.StartsWith((string)AppState.Value["currentInstanceUrl"]):
+                    Resource.OpenIncognitoBrowser((string)AppState.Value["currentInstanceUrl"],url.Substring(((string)AppState.Value["currentInstanceUrl"]).Length),
+                        AppSettings, OrgSettings);
                     break;
                 default:
                     PageInterception(appPage, () => e.Request.ContinueAsync(), e.Request).ScheduleTask();
@@ -362,7 +367,7 @@ namespace SF_DataExport
                             AppState.Commit(new JObject { [AppConstants.ACTION_REDIRECT] = redirectUrl });
                             return Observable.Empty<Unit>();
                         })
-                    ).ScheduleTask();
+                    ).Catch((Exception ex) => Observable.Empty<Unit>()).ScheduleTask();
                     break;
                 case var url when url.StartsWith(OAuth.REDIRECT_URI + "?") || url.StartsWith(OAuth.REDIRECT_URI_SANDBOX + "?"):
                     AppState.Commit(new JObject { [AppConstants.ACTION_REDIRECT] = OAuth.REDIRECT_URI });
@@ -377,7 +382,7 @@ namespace SF_DataExport
             switch (appPage?.Target.Url)
             {
                 case var url when url.StartsWith(OAuth.REDIRECT_URI + "#") || url.StartsWith(OAuth.REDIRECT_URI_SANDBOX + "#")
-                || url.StartsWith(OAuth.REDIRECT_URI + "?") || url.StartsWith(OAuth.REDIRECT_URI_SANDBOX + "?"):
+                    || url.StartsWith(OAuth.REDIRECT_URI + "?") || url.StartsWith(OAuth.REDIRECT_URI_SANDBOX + "?"):
                     AppState.Commit(new JObject { [AppConstants.ACTION_REDIRECT] = OAuth.REDIRECT_URI });
                     break;
             }

@@ -43,17 +43,21 @@ namespace SF_DataExport.Dispatcher
                     appState.Commit(new JObject
                     {
                         ["currentInstanceUrl"] = "",
+                        ["orgLimits"] = new JObject(),
                         ["popoverUserId"] = "",
                         ["showOrgModal"] = true,
                         ["userId"] = "",
                         ["userIdAs"] = "",
-                        ["users"] = new JArray()
+                        ["userLicenses"] = new JArray(),
+                        ["userProfiles"] = new JArray(),
+                        ["userRoles"] = new JObject(),
+                        ["users"] = new JArray(),
                     });
                 }
                 var oauthPage = instanceUrl +
                     "/identity/app/connectedAppsUserList.apexp?app_name=SFDataExport&consumer_key=" +
                     HttpUtility.UrlEncode(resource.GetClientIdByLoginUrl(loginUrl));
-                resource.OpenBrowserIncognito(oauthPage, appSettings.GetString(AppConstants.PATH_CHROME));
+                resource.OpenIncognitoBrowser(oauthPage, appSettings.GetString(AppConstants.PATH_CHROME));
             }).ScheduleTask();
         }
     }

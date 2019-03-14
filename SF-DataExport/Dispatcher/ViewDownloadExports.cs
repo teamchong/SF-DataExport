@@ -37,7 +37,7 @@ namespace SF_DataExport.Dispatcher
                 resource.GetLoginUrlAs(instanceUrl, id, userId,
                 "/ui/setup/export/DataExportPage/d?setupid=DataManagementExport");
             var urlWithAccessCode = resource.GetUrlViaAccessToken(instanceUrl, accessToken, targeturl);
-            resource.OpenBrowserIncognito(urlWithAccessCode, appSettings.GetString(AppConstants.PATH_CHROME));
+            resource.OpenIncognitoBrowser(urlWithAccessCode, appSettings.GetString(AppConstants.PATH_CHROME));
         }
     }
 }

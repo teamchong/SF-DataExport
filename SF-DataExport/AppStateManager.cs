@@ -52,14 +52,17 @@ namespace SF_DataExport
                 ["exportResult"] = "",
                 ["exportResultFiles"] = new JArray(),
                 ["isLoading"] = false,
-                ["showOrgModal"] = true,
-                ["showUserPopover"] = true,
+                ["orgLimits"] = new JObject(),
                 ["orgSettingsPath"] = OrgSettings.GetDirectoryPath(),
                 ["orgSettingsPathItems"] = new JArray(OrgSettings.GetDirectoryPath()),
                 ["popoverUserId"] = "",
-                ["tab"] = "overview",//"downloaddataexport", //"setup"
+                ["showOrgModal"] = true,
+                ["showUserPopover"] = false,
+                ["tab"] = "overview", //"downloaddataexport", //"setup"
                 ["userId"] = "",
                 ["userIdAs"] = "",
+                ["userLicenses"] = new JArray(),
+                ["userProfiles"] = new JArray(),
                 ["userRoles"] = new JObject(),
                 ["users"] = new JArray(),
             };
@@ -152,9 +155,6 @@ namespace SF_DataExport
                             break;
                         case "viewDownloadExports":
                             new ViewDownloadExports().Dispatch(payload, this, Resource, AppSettings, OrgSettings);
-                            break;
-                        case "viewPage":
-                            new ViewPage().Dispatch(payload, this, Resource, AppSettings, OrgSettings);
                             break;
                         case "viewUserPage":
                             new ViewUserPage().Dispatch(payload, this, Resource, AppSettings, OrgSettings);
@@ -256,7 +256,7 @@ namespace SF_DataExport
             }
         }
 
-        public JArray GetOrgData(List<JObject> data, string dataParentRoleId)
+        public JArray GetOrgData(List<JObject> data, string dataParentRoleId, JArray users, string instanceUrl)
         {
             var result = new JArray();
             foreach (var row in data)
@@ -270,8 +270,10 @@ namespace SF_DataExport
                     {
                         ["id"] = id,
                         ["name"] = name,
+                        ["url"] = !string.IsNullOrEmpty(id) ? instanceUrl + "/" + id : "",
+                        ["users"] = new JArray(users.Where(u => (string)u.SelectToken("UserRole.Name") == name)),
                     };
-                    var children = GetOrgData(data, id);
+                    var children = GetOrgData(data, id, users, instanceUrl);
                     if (children.Count > 0)
                     {
                         obj["children"] = children;
@@ -290,42 +292,55 @@ namespace SF_DataExport
                 ["currentInstanceUrl"] = client.InstanceUrl,
                 ["popoverUserId"] = "",
                 ["showOrgModal"] = false,
+                ["orgLimits"] = new JObject(),
                 ["userId"] = userId,
                 ["userIdAs"] = userId,
-                ["users"] = new JArray()
+                ["userLicenses"] = new JArray(),
+                ["userProfiles"] = new JArray(),
+                ["userRoles"] = new JObject(),
+                ["users"] = new JArray(),
             });
 
-            Observable.Merge(
-                Observable.FromAsync(async () =>
+            Observable.FromAsync(async () =>
+            {
+                if ((string)State["currentInstanceUrl"] != client.InstanceUrl)
+                    throw new InvalidOperationException();
+
+                var request = new BatchRequest();
+                request.Limits();
+                request.Query("SELECT Name,UsedLicenses,TotalLicenses FROM UserLicense WHERE Status = 'Active' AND TotalLicenses > 0 ORDER BY Name");
+                request.Query("SELECT Id,Name,Username,Email,UserRole.Name,Profile.Name,FullPhotoUrl,SmallPhotoUrl FROM User WHERE IsActive=true ORDER BY Name,Email");
+                request.Query("SELECT Id,Name,ParentRoleId FROM UserRole ORDER BY ParentRoleId,Name");
+                var result = await client.Composite.BatchAsync(request);
+
+                var orgLimits = result.Results("0") ?? new JObject();
+                var userLicenses = new JArray(client.GetEnumerable(result.Queries("1")));
+                var users = new JArray(client.GetEnumerable(result.Queries("2")));
+                var userProfiles = new JArray(users
+                    .Select(user => (string)user.SelectToken("Profile.Name") ?? "")
+                    .Where(r => !string.IsNullOrEmpty(r))
+                    .Distinct().OrderBy(r => r));
+                var userRoles = new JObject
                 {
-                    if ((string)State["currentInstanceUrl"] != client.InstanceUrl)
-                        throw new InvalidOperationException();
-                    var data = (await client.GetEnumerableAsync("SELECT Id,Name,ParentRoleId FROM UserRole ORDER BY ParentRoleId,Name").GoOn()).ToList();
-                    var userRoles = new JObject
-                    {
-                        ["id"] = client.InstanceUrl,
-                        ["name"] = client.InstanceUrl.Replace("https://", ""),
-                        ["children"] = GetOrgData(data, ""),
-                    };
-                    if ((string)State["currentInstanceUrl"] != client.InstanceUrl)
-                        throw new InvalidOperationException();
-                    Commit(new JObject { ["userRoles"] = userRoles });
-                }),
-                Observable.FromAsync(async () =>
+                    ["id"] = client.InstanceUrl,
+                    ["name"] = client.InstanceUrl.Replace("https://", ""),
+                    ["url"] = "",
+                    ["users"] = new JArray(),
+                    ["children"] = GetOrgData(client.GetEnumerable(result.Queries("3")).ToList(), "", users, client.InstanceUrl),
+                };
+
+                if ((string)State["currentInstanceUrl"] != client.InstanceUrl)
+                    throw new InvalidOperationException();
+                Commit(new JObject
                 {
-                    if ((string)State["currentInstanceUrl"] != client.InstanceUrl)
-                        throw new InvalidOperationException();
-                    var users = new JArray(await client.GetEnumerableAsync("SELECT Id,Name,Username,Email,UserRole.Name,Profile.Name,FullPhotoUrl,SmallPhotoUrl FROM User WHERE IsActive=true ORDER BY Name,Email").GoOn());
-                    if ((string)State["currentInstanceUrl"] != client.InstanceUrl)
-                        throw new InvalidOperationException();
-                    var userProfiles = new JArray(users
-                        .Select(user => (string)user.SelectToken("Profile.Name") ?? "")
-                        .Where(r => !string.IsNullOrEmpty(r))
-                        .Distinct().OrderBy(r => r));
-                    Commit(new JObject { ["users"] = users, ["userProfiles"] = userProfiles });
-                })
-            )
-            .ScheduleTask();
+                    ["orgLimits"] = orgLimits,
+                    ["userLicenses"] = userLicenses,
+                    ["userProfiles"] = userProfiles,
+                    ["userRoles"] = userRoles,
+                    ["users"] = users,
+                });
+            })
+        .ScheduleTask();
         }
 
         public string GetPageContent()

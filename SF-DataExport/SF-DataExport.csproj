@@ -25,4 +25,8 @@
     <EmbeddedResource Include="res\**\*.*" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Remove="res\app.css" />
+  </ItemGroup>
+
 </Project>

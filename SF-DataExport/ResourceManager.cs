@@ -33,7 +33,7 @@ namespace SF_DataExport
 <link rel='stylesheet' type='text/css' href='/vuetify.css'>
 <link rel='stylesheet' type='text/css' href='/slds.css'>
 <link rel='stylesheet' type='text/css' href='/orgchart.css'>
-<style>[v-cloak]{display:none;}</style>
+<link rel='stylesheet' type='text/css' href='/app.css'>
 <script src='/vue.js'></script>
 <script src='/vuex.js'></script>
 <script src='/vuetify.js'></script>
@@ -140,10 +140,17 @@ namespace SF_DataExport
             }
         }
 
-        public void OpenBrowserIncognito(string url, string chromePath)
+        public void OpenIncognitoBrowser(string url, string chromePath)
         {
             var process = new ProcessStartInfo(chromePath, "-incognito " + url);
             Process.Start(process);
+        }
+        
+        public void OpenIncognitoBrowser(string instanceUrl, string url, JsonConfig appSettings, JsonConfig orgSettings)
+        {
+            var accessToken = (string)orgSettings.Get(o => o[instanceUrl]?[OAuth.ACCESS_TOKEN]) ?? "";
+            var urlWithAccessCode = GetUrlViaAccessToken(instanceUrl, accessToken, url);
+            OpenIncognitoBrowser(urlWithAccessCode, appSettings.GetString(AppConstants.PATH_CHROME));
         }
 
         public string GetResource(string resPath)
