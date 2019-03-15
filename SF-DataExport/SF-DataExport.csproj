@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>netcoreapp2.2</TargetFramework>
+    <TargetFramework>netcoreapp2.1</TargetFramework>
     <!--<RuntimeIdentifiers>win10-x64;osx.10.11-x64;ubuntu.16.04-x64</RuntimeIdentifiers>-->
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>sf-dataexport</ToolCommandName>
@@ -11,13 +11,14 @@
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <ApplicationIcon>favicon.ico</ApplicationIcon>
     <StartupObject />
-    <Version>1.0.0.19034</Version>
+    <Version>1.0.0.19035</Version>
     <RepositoryUrl>https://github.com/ste80/sf-dataexport</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageProjectUrl>https://github.com/ste80/sf-dataexport</PackageProjectUrl>
     <Description>Tool for download export data from salesforce.</Description>
     <PackageLicenseUrl>https://raw.githubusercontent.com/ste80/SF-DataExport/master/LICENSE</PackageLicenseUrl>
     <PackageTags>salesforce</PackageTags>
+    <PackageReleaseNotes>https://raw.githubusercontent.com/ste80/SF-DataExport/master/README.md</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>
