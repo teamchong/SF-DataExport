@@ -193,7 +193,9 @@ namespace SF_DataExport
                         })
 				        .Catch((Exception ex) => Observable.Defer(() =>
 				        {
+#if DEBUG
 					        Console.WriteLine(ex.ToString());
+#endif
 					        return Observable.Never<JToken>();
 				        }));
                     }
@@ -217,7 +219,9 @@ namespace SF_DataExport
                     )
 				    .Catch((Exception ex) => Observable.Defer(() =>
 				    {
+#if DEBUG
 					    Console.WriteLine(ex.ToString());
+#endif
 					    return Observable.Never<JSHandle>();
 				    }))
                 )

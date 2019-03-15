@@ -129,7 +129,13 @@ namespace SF_DataExport
             .Catch((Exception ex) => Observable.Defer(() =>
             {
                 Console.WriteLine(ex.ToString());
-                return Observable.Return(Unit.Default);
+                return Observable.FromAsync(async () =>
+                {
+                    if (IsRequestInterception)
+                    {
+                        await request.AbortAsync();
+                    }
+                }).Catch((Exception _) => Observable.Return(Unit.Default));
             }))
             .SubscribeOn(TaskPoolScheduler.Default);
         }
@@ -276,6 +282,7 @@ namespace SF_DataExport
                                 await PageInterception(appPage, () => e.Request.ContinueAsync(), e.Request);
                         }
                     })
+                    .Catch((Exception ex) => Observable.FromAsync(() => e.Request.AbortAsync()).Catch((Exception _) => Observable.Return(Unit.Default)))
                     .SubscribeOn(TaskPoolScheduler.Default);
                     break;
                 case var url when !string.IsNullOrEmpty((string)AppState.Value["currentInstanceUrl"]) && url.StartsWith((string)AppState.Value["currentInstanceUrl"]):

@@ -311,6 +311,64 @@
     });
 </script>
 
+<script type="text/x-template" id="photos-tab-template">
+    <div>
+        <div class="slds-page-header">
+            <div class="slds-page-header__row">
+                <div class="slds-page-header__col-title">
+                    <div class="slds-media">
+                        <div class="slds-media__figure">
+                            <span class="slds-icon_container slds-icon-standard-carousel" title="User Photos">
+                                <svg class="slds-icon slds-page-header__icon">
+                                    <use xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="/assets/icons/standard-sprite/svg/symbols.svg#carousel" />
+                                </svg>
+                            </span>
+                        </div>
+                        <div class="slds-media__body">
+                            <div class="slds-page-header__name">
+                                <div class="slds-page-header__name-title">
+                                    <h1>
+                                        <span class="slds-page-header__title slds-truncate" title="User Photos">User Photos</span>
+                                    </h1>
+                                </div>
+                            </div><!--<p class="slds-page-header__name-meta">-</p>-->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div style="padding:1em;position:relative;">
+            <div v-if="currentInstanceUrl && userCount" id="user-photos-div">
+                <a v-for="userPhoto in userPhotos">
+                    <img :src="userPhoto.photo"/>
+                    <span>{{userPhoto.name}}</span>
+                </a>
+            </div>
+            <spinner class="slds-spinner_medium" style="margin-top:2em;" v-if="currentInstanceUrl && !userCount"></spinner>
+            <div v-if="!currentInstanceUrl" style="padding:5em;">
+                <a href="javascript:void(0)" @click="dispatch('showOrgModal',true)">click here to login your organization.</a>
+            </div>
+        </div>
+    </div>
+</script>
+<script>
+    Vue.component('photos-tab', {
+        template: '#photos-tab-template',
+        computed: {
+            currentInstanceUrl() {
+                return this.$store.state.currentInstanceUrl;
+            },
+            userCount() { return this.$store.state.users.length; },
+            userPhotos() {
+                const { currentInstanceUrl, users } = this.$store.state;
+                return users
+                    .filter(u => u.FullPhotoUrl && !/\.content\.force\.com\/profilephoto\/005\//i.test(u.FullPhotoUrl))
+                    .map(u => ({ url: currentInstanceUrl + '/' + u.Id, name: u.Name, photo: u.FullPhotoUrl }));
+            },
+        },
+    });
+</script>
+
 <script type="text/x-template" id="limits-tab-template">
     <div>
         <div class="slds-page-header">
@@ -795,8 +853,7 @@
                 </div>
                 <div class="slds-global-header__item">
                     <h1 v-if="currentInstanceUrl">
-                        <a href="javascript:void(0)"
-                           @click="dispatch('viewPage',{instanceUrl:currentInstanceUrl,url:currentInstanceUrl})">
+                        <a :href="currentInstanceUrl">
                             {{currentInstanceUrl|orgname}}
                         </a>
                     </h1>
@@ -884,6 +941,17 @@
                             </span>Overview
                         </a>
                     </li>
+                    <li :class="['slds-tabs_default__item',tab=='photos'?'slds-is-active':'']" title="User Photos">
+                        <a class="slds-tabs_default__link" href="javascript:void(0);" role="tab" tabindex="0" @click="dispatch('tab','photos')">
+                            <span class="slds-tabs__left-icon">
+                                <span class="slds-icon_container slds-icon-standard-carousel" title="User Photos">
+                                    <svg class="slds-icon slds-icon_small">
+                                        <use xlink:href="/assets/icons/standard-sprite/svg/symbols.svg#carousel"></use>
+                                    </svg>
+                                </span>
+                            </span>User Photos
+                        </a>
+                    </li>
                     <li :class="['slds-tabs_default__item',tab=='limits'?'slds-is-active':'']" title="Org Limits">
                         <a class="slds-tabs_default__link" href="javascript:void(0);" role="tab" tabindex="0" @click="dispatch('tab','limits')">
                             <span class="slds-tabs__left-icon">
@@ -920,6 +988,9 @@
                 </ul>
                 <div :class="['slds-tabs_default__content',tab=='overview'?'slds-show':'slds-hide']" style="padding:1em;">
                     <overview-tab></overview-tab>
+                </div>
+                <div :class="['slds-tabs_default__content',tab=='photos'?'slds-show':'slds-hide']" style="padding:1em;">
+                    <photos-tab></photos-tab>
                 </div>
                 <div :class="['slds-tabs_default__content',tab=='limits'?'slds-show':'slds-hide']" style="padding:1em;">
                     <limits-tab></limits-tab>
