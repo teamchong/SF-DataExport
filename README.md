@@ -16,3 +16,4 @@ dotnet tool install -g sf-dataexport
 
 ```
 Usage: sf-dataexport
+```
