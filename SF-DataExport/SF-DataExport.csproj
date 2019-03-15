@@ -7,7 +7,6 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>sf-dataexport</ToolCommandName>
     <AssemblyName>sf-dataexport</AssemblyName>
-    <PackageOutputPath>./nupkg</PackageOutputPath>
     <RootNamespace>SF_DataExport</RootNamespace>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <ApplicationIcon>favicon.ico</ApplicationIcon>
