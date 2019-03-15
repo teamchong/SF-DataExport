@@ -12,6 +12,12 @@ Install the [`sf-dataexport`](https://www.nuget.org/packages/sf-dataexport)
 dotnet tool install -g sf-dataexport
 ```
 
+## Version update
+
+```
+dotnet tool update -g sf-dataexport
+```
+
 ## Usage
 
 ```
