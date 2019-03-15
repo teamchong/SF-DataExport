@@ -201,6 +201,16 @@ namespace SF_DataExport.Dispatcher
                             });
 
                         }
+                        else
+                        {
+                            Console.WriteLine("Export completed");
+                            exportResult.Append("Export completed");
+                            appState.Commit(new JObject
+                            {
+                                ["exportResult"] = exportResult.ToString(),
+                                ["exportResultFiles"] = exportResultFiles
+                            });
+                        }
                         return 0;
                     }, instanceUrl, accessToken, targetUrl).GoOn();
                 }
