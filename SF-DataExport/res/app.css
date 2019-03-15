@@ -15,32 +15,33 @@
     position: relative;
 }
 
-    #chart-container .node .users {
-        display: block;
-        -ms-transform: rotate(-90deg) translate(-40px, -40px) rotateY(180deg);
-        -moz-transform: rotate(-90deg) translate(-40px, -40px) rotateY(180deg);
-        -webkit-transform: rotate(-90deg) translate(-40px, -40px) rotateY(180deg);
-        transform: rotate(-90deg) translate(-40px, -40px) rotateY(180deg);
-        -ms-transform-origin: top center;
-        -moz-transform-origin: top center;
-        -webkit-transform-origin: top center;
-        transform-origin: top center;
+
+    #chart-container .node:hover .content {
+        overflow: visible;
+    }
+
+    #chart-container .node .content > a {
+        display: inline-block;
+        background-color: #fff;
+        width: auto;
+    }
+
+    #chart-container .node .content .users {
+        display: none;
         position: absolute;
-        overflow: hidden;
         z-index: 1;
         background: #fff;
         border: 1px solid #ccc;
         border-radius: 5px;
-        margin-top: 22px;
-        height: auto;
-        opacity: 0;
+        top: 20px;
+        left: 0;
     }
 
-        #chart-container .node:hover .users {
-            opacity: 1;
-        }
+    #chart-container .node:hover .content .users {
+        display: block;
+    }
 
-    #chart-container .node .users .slds-truncate {
+    #chart-container .node .content .users .slds-truncate {
         display: block;
         font-size: 10px;
         min-width: 100px;

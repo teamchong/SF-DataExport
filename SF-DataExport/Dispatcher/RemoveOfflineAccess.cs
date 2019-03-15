@@ -40,7 +40,8 @@ namespace SF_DataExport.Dispatcher
                     ["orgOfflineAccess"] = new JArray(orgSettings.List()
                     .Where(org => !string.IsNullOrEmpty((string)orgSettings.Get(o => o[org]?[OAuth.REFRESH_TOKEN]))))
                 });
-            }).ScheduleTask();
+            })
+            .ScheduleTask();
         }
     }
 }

@@ -222,7 +222,8 @@ namespace SF_DataExport.Dispatcher
                 {
                     appState.Commit(new JObject { ["isLoading"] = false });
                 }
-            }).ScheduleTask();
+            })
+            .ScheduleTask();
         }
     }
 }

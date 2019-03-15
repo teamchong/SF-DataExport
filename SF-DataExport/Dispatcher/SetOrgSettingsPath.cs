@@ -38,7 +38,8 @@ namespace SF_DataExport.Dispatcher
                 {
                     appState.Commit(new JObject { ["alertMessage"] = "No change.", ["isLoading"] = false });
                 }
-            }).ScheduleTask();
+            })
+            .ScheduleTask();
         }
     }
 }

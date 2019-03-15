@@ -79,7 +79,8 @@ namespace SF_DataExport.Dispatcher
                     appState.Commit(new JObject { [AppConstants.ACTION_REDIRECT] = targetUrl, ["isLoading"] = false });
                     return;
                 }
-            }).ScheduleTask();
+            })
+            .ScheduleTask();
         }
     }
 }

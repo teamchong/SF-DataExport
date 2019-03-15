@@ -12,7 +12,14 @@ namespace SF_DataExport
 {
     public static class IObservableExtension
     {
-        public static IDisposable ScheduleTask<TResult>(this IObservable<TResult> observable) => 
-            observable.ObserveOn(TaskPoolScheduler.Default).SubscribeOn(TaskPoolScheduler.Default).Subscribe();
+        public static IDisposable ScheduleTask<TResult>(this IObservable<TResult> observable) =>
+            observable.Catch((Exception ex) =>
+            {
+#if DEBUG
+                Console.WriteLine(ex.ToString());
+#endif
+                return Observable.Empty<TResult>();
+            })
+            .ObserveOn(TaskPoolScheduler.Default).SubscribeOn(TaskPoolScheduler.Default).Subscribe();
     }
 }

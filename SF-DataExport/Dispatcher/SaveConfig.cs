@@ -58,7 +58,8 @@ namespace SF_DataExport.Dispatcher
                     appState.Commit(new JObject { ["alertMessage"] = message, ["isLoading"] = false });
                 }
                 return Observable.Empty<Unit>();
-            })).ScheduleTask();
+            }))
+            .ScheduleTask();
         }
     }
 }
