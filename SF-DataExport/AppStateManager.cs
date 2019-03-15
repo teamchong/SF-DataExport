@@ -190,7 +190,12 @@ namespace SF_DataExport
                             await appPage.GoToAsync(redirect, 0, new[] { WaitUntilNavigation.DOMContentLoaded }).GoOn();
                             newState.Remove(AppConstants.ACTION_REDIRECT);
                             return newState;
-                        });
+                        })
+				        .Catch((Exception ex) => Observable.Defer(() =>
+				        {
+					        Console.WriteLine(ex.ToString());
+					        return Observable.Never<JToken>();
+				        }));
                     }
                     return Observable.Return(newState);
                 }))
@@ -210,13 +215,13 @@ namespace SF_DataExport
                         }),
                         Observable.Empty<JSHandle>()
                     )
+				    .Catch((Exception ex) => Observable.Defer(() =>
+				    {
+					    Console.WriteLine(ex.ToString());
+					    return Observable.Never<JSHandle>();
+				    }))
                 )
                 //.ScheduleTask();
-                .Catch((Exception ex) => Observable.Defer(() =>
-                {
-                    Console.WriteLine(ex.ToString());
-                    return Observable.Empty<JSHandle>();
-                }))
                 .Finally(() => Console.WriteLine("CommitSubject end unexpctedly."))
                 .Subscribe();
             //.SubscribeOn(TaskPoolScheduler.Default).Subscribe();
