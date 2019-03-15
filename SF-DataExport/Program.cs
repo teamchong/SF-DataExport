@@ -17,8 +17,9 @@ namespace SF_DataExport
             try
             {
                 Console.WriteLine(AppDomain.CurrentDomain.FriendlyName + " v" + typeof(Program).Assembly.GetName().Version);
-                var appSettings = new JsonConfig(Path.Combine(AppContext.BaseDirectory, AppConstants.JSON_APP_SETTINGS));
-                var orgSettings = new JsonConfig(Path.Combine(GetOrgPath(appSettings).orgPath, AppConstants.JSON_ORG_SETTINGS));
+                var resource = new ResourceManager();
+                var appSettings = new JsonConfig(Path.Combine(resource.DefaultDirectory, AppConstants.JSON_APP_SETTINGS));
+                var orgSettings = new JsonConfig(Path.Combine(GetOrgPath(appSettings, resource).orgPath, AppConstants.JSON_ORG_SETTINGS));
 
                 var cliApp = new CommandLineApplication(false);
                 var replaceRex = new Regex(@"^https://|\.my\.salesforce\.com$|\.salesforce\.com$", RegexOptions.IgnoreCase);
@@ -36,8 +37,8 @@ namespace SF_DataExport
                         cliCfg.OnExecute(async () =>
                         {
                             cliApp.ShowHelp();
-                            await InitializeAsync(appSettings, pathOpt, channelOpt).GoOn();
-                            return await StartAsync(appSettings, orgSettings, org.Name, null).GoOn();
+                            await InitializeAsync(appSettings, resource, pathOpt, channelOpt).GoOn();
+                            return await StartAsync(appSettings, orgSettings, resource, org.Name, null).GoOn();
                         });
                     });
 
@@ -51,8 +52,8 @@ namespace SF_DataExport
                             var exportPathOpt = cliCfg.Option("-path", "Export to path", CommandOptionType.SingleValue);
                             cliCfg.OnExecute(async () =>
                             {
-                                await InitializeAsync(appSettings, pathOpt, channelOpt).GoOn();
-                                return await StartAsync(appSettings, orgSettings, "", new JObject
+                                await InitializeAsync(appSettings, resource, pathOpt, channelOpt).GoOn();
+                                return await StartAsync(appSettings, orgSettings, resource, "", new JObject
                                 {
                                     ["command"] = AppConstants.COMMAND_DOWNLOAD,
                                     ["instanceUrl"] = org.Name,
@@ -70,8 +71,8 @@ namespace SF_DataExport
                     cliApp.OnExecute(async () =>
                     {
                         cliApp.ShowHelp();
-                        await InitializeAsync(appSettings, pathOpt, channelOpt).GoOn();
-                        return await StartAsync(appSettings, orgSettings, "", null).GoOn();
+                        await InitializeAsync(appSettings, resource, pathOpt, channelOpt).GoOn();
+                        return await StartAsync(appSettings, orgSettings, resource, "", null).GoOn();
                     });
                 }
 
@@ -83,17 +84,17 @@ namespace SF_DataExport
             }
         }
 
-        static async Task InitializeAsync(JsonConfig appSettings, CommandOption pathOpt, CommandOption channelOpt)
+        static async Task InitializeAsync(JsonConfig appSettings, ResourceManager resource, CommandOption pathOpt, CommandOption channelOpt)
         {
             var chromePathInConfig = appSettings.GetString(AppConstants.PATH_CHROME);
-            var chromePath = GetChromePath(channelOpt.Value(), pathOpt.Value(), chromePathInConfig);
+            var chromePath = GetChromePath(resource, channelOpt.Value(), pathOpt.Value(), chromePathInConfig);
 
             if (!string.IsNullOrEmpty(chromePath) && chromePathInConfig != chromePath)
             {
                 await appSettings.SaveAysnc(cfg => cfg[AppConstants.PATH_CHROME] = chromePath).GoOn();
             }
 
-            var (orgPath, orgPathInConfig, orgPathSave) = GetOrgPath(appSettings);
+            var (orgPath, orgPathInConfig, orgPathSave) = GetOrgPath(appSettings, resource);
 
             if (orgPathSave != orgPathInConfig)
             {
@@ -112,18 +113,18 @@ namespace SF_DataExport
             Console.WriteLine(AppConstants.JSON_APP_SETTINGS + ": " + appSettings.Get(d => d.ToString(0)));
         }
 
-        static (string orgPath, string orgPathInConfig, string orgPathSave) GetOrgPath(JsonConfig appSettings)
+        static (string orgPath, string orgPathInConfig, string orgPathSave) GetOrgPath(JsonConfig appSettings, ResourceManager resource)
         {
             var orgPathInConfig = appSettings.GetString(AppConstants.PATH_ORG_SETTINGS);
             var orgPath = (orgPathInConfig != "" ? orgPathInConfig : null)
-                ?? AppContext.BaseDirectory;
-            var orgPathSave = orgPath != AppContext.BaseDirectory ? orgPath : "";
+                ?? resource.DefaultDirectory;
+            var orgPathSave = orgPath != resource.DefaultDirectory ? orgPath : "";
             return (orgPath, orgPathInConfig, orgPathSave);
         }
 
-        static string GetChromePath(string channelOpt, params string[] pathOpts)
+        static string GetChromePath(ResourceManager resource, string channelOpt, params string[] pathOpts)
         {
-            var finder = new ChromeFinder();
+            var finder = new ChromeFinder(resource);
 
             if (pathOpts != null)
             {
@@ -137,7 +138,7 @@ namespace SF_DataExport
                 }
             }
 
-            var (chromePath, type) = new ChromeFinder().Find(channelOpt);
+            var (chromePath, type) = new ChromeFinder(resource).Find(channelOpt);
             if (string.IsNullOrEmpty(chromePath))
             {
                 return null;
@@ -146,11 +147,11 @@ namespace SF_DataExport
             return chromePath;
         }
 
-        static async Task<int> StartAsync(JsonConfig appSettings, JsonConfig orgSettings, string instanceUrl, JObject command)
+        static async Task<int> StartAsync(JsonConfig appSettings, JsonConfig orgSettings, ResourceManager resource, string instanceUrl, JObject command)
         {
             if (string.IsNullOrEmpty(appSettings.GetString(AppConstants.PATH_CHROME)))
             {
-                new ResourceManager().OpenBrowser("https://www.google.com/chrome");
+                resource.OpenBrowser("https://www.google.com/chrome");
                 throw new Exception("Cannot find chromium installation path, please specific the path using the -chromepath <path> option.");
             }
 

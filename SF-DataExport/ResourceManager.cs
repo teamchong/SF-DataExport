@@ -7,8 +7,10 @@ using System.Net;
 using System.Net.Http;
 using System.Runtime.InteropServices;
 using System.Linq;
+using System.Reactive.Subjects;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Web;
 
@@ -16,10 +18,12 @@ namespace SF_DataExport
 {
     public class ResourceManager
     {
-
         public string CONTENT_HTML_START { get; protected set; }
 
         public string CONTENT_HTML_END { get; protected set; }
+
+        SemaphoreSlim Throttler { get; set; }
+        BehaviorSubject<(DateTime cacheTime, CookieContainer cookies, string instanceUrl, string accessToken)> LatestSession { get; set; }
 
         public ResourceManager()
         {
@@ -28,12 +32,13 @@ namespace SF_DataExport
             CONTENT_HTML_START = string.Join("", @"<html>
 <head>
 <title>Salesforce DataExport</title>
-<link rel='shortcut icon' type='image/x-icon' href='/favicon.ico'>
-<link rel='stylesheet' type='text/css' href='/material-icons.css'>
-<link rel='stylesheet' type='text/css' href='/vuetify.css'>
-<link rel='stylesheet' type='text/css' href='/slds.css'>
-<link rel='stylesheet' type='text/css' href='/orgchart.css'>
-<link rel='stylesheet' type='text/css' href='/app.css'>
+<link rel='shortcut icon' type='image/x-icon' href='/favicon.ico'/>
+<link rel='stylesheet' type='text/css' href='/material-icons.css'/>
+<link rel='stylesheet' type='text/css' href='/vuetify.css'/>
+<link rel='stylesheet' type='text/css' href='/slds.css'/>
+<link rel='stylesheet' type='text/css' href='/orgchart.css'/>
+<link rel='stylesheet' type='text/css' href='/font-awesome.css'/>
+<link rel='stylesheet' type='text/css' href='/app.css'/>
 <script src='/vue.js'></script>
 <script src='/vuex.js'></script>
 <script src='/vuetify.js'></script>
@@ -46,6 +51,40 @@ namespace SF_DataExport
 </script>", GetResource("app.html"), @"
 </body>
 </html>");
+            Throttler = new SemaphoreSlim(1, 1);
+            LatestSession = new BehaviorSubject<(DateTime cacheTime, CookieContainer cookies, string instanceUrl, string accessToken)>(
+                (DateTime.Now, new CookieContainer(), "", ""));
+        }
+
+        public async Task<CookieContainer> GetCookieAsync(string newInstanceUrl, string newAccessToken)
+        {
+            await Throttler.WaitAsync();
+
+            try
+            {
+                var (cacheTime, cookies, instanceUrl, accessToken) = LatestSession.Value;
+                if (instanceUrl == newInstanceUrl && accessToken == newAccessToken && cacheTime > DateTime.Now.AddMinutes(-5))
+                {
+                    return cookies;
+                }
+                var targetUrl = newInstanceUrl;
+                var urlWithAccessCode = GetUrlViaAccessToken(newInstanceUrl, newAccessToken, targetUrl);
+
+                var cookieContainer = new CookieContainer();
+                using (var handler = new HttpClientHandler() { CookieContainer = cookieContainer })
+                {
+                    using (var httpClient = new HttpClient(handler))
+                    {
+                        var htmlContent = await GetLoginWaitForRedirect(httpClient, newInstanceUrl, urlWithAccessCode, targetUrl).GoOn();
+                        LatestSession.OnNext((DateTime.Now, cookieContainer, newInstanceUrl, newAccessToken));
+                        return cookieContainer;
+                    }
+                }
+            }
+            finally
+            {
+                Throttler.Release();
+            }
         }
 
         public Task<T> RunClientAsUserAsync<T>(Func<HttpClient, CookieContainer, string, Task<T>> funcAsync, string instanceUrl, string accessToken, string targetUrl, string id, string userId)
@@ -56,14 +95,13 @@ namespace SF_DataExport
 
         public async Task<T> RunClientAsync<T>(Func<HttpClient, CookieContainer, string, Task<T>> funcAsync, string instanceUrl, string accessToken, string targetUrl)
         {
-            var urlWithAccessCode = GetUrlViaAccessToken(instanceUrl, accessToken, targetUrl);
+            var cookieContainer = await GetCookieAsync(instanceUrl, accessToken);
 
-            var cookieContainer = new CookieContainer();
             using (var handler = new HttpClientHandler() { CookieContainer = cookieContainer })
             {
                 using (var httpClient = new HttpClient(handler))
                 {
-                    var htmlContent = await GetLoginWaitForRedirect(httpClient, instanceUrl, urlWithAccessCode, targetUrl).GoOn();
+                    var htmlContent = await httpClient.GetStringAsync(targetUrl).GoOn();
                     return await funcAsync(httpClient, cookieContainer, htmlContent).GoOn();
                 }
             }
@@ -77,7 +115,7 @@ namespace SF_DataExport
             try
             {
                 process.StartInfo.FileName = exeFileName;
-                process.StartInfo.WorkingDirectory = Directory.GetCurrentDirectory();
+                process.StartInfo.WorkingDirectory = DefaultDirectory;
                 // process.StartInfo.Arguments = args;
                 process.StartInfo.RedirectStandardError = true;
                 process.StartInfo.RedirectStandardOutput = true;
@@ -144,13 +182,6 @@ namespace SF_DataExport
         {
             var process = new ProcessStartInfo(chromePath, "-incognito " + url);
             Process.Start(process);
-        }
-        
-        public void OpenIncognitoBrowser(string instanceUrl, string url, JsonConfig appSettings, JsonConfig orgSettings)
-        {
-            var accessToken = (string)orgSettings.Get(o => o[instanceUrl]?[OAuth.ACCESS_TOKEN]) ?? "";
-            var urlWithAccessCode = GetUrlViaAccessToken(instanceUrl, accessToken, url);
-            OpenIncognitoBrowser(urlWithAccessCode, appSettings.GetString(AppConstants.PATH_CHROME));
         }
 
         public string GetResource(string resPath)
@@ -304,8 +335,7 @@ namespace SF_DataExport
 
         public async Task<byte[]> GetBytesViaAccessTokenAsync(string instanceUrl, string accessToken, string targetUrl)//, string mediaType)
         {
-            var url = GetUrlViaAccessToken(instanceUrl, accessToken, targetUrl);
-            if (string.IsNullOrEmpty(url)) return new byte[0];
+            if (string.IsNullOrEmpty(targetUrl)) return new byte[0];
 
             return await RunClientAsync(async (httpClient, cookieContainer, htmlContent) =>
             {
@@ -315,29 +345,45 @@ namespace SF_DataExport
             }, instanceUrl, accessToken, targetUrl).GoOn();
         }
 
+        public string DefaultDirectory
+        {
+            get
+            {
+                var directory = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData, Environment.SpecialFolderOption.Create),
+                    AppDomain.CurrentDomain.FriendlyName);
+                Directory.CreateDirectory(directory);
+                return directory;
+            }
+        }
+
         public string GetContentType(string path)
         {
             var resExt = Path.GetExtension(path)?.ToLower();
             switch (resExt)
             {
+                case ".css":
+                    return "text/css";
+                case ".eot":
+                    return "application/vnd.ms-fontobject";
+                case ".jpg":
+                case ".jpeg":
+                    return "image/jpeg";
+                case ".js":
+                    return "text/javascript";
+                case ".otf":
+                    return "application/font-otf";
+                case ".png":
+                    return "image/png";
                 case ".svg":
                 case ".svgz":
                     return "image/svg+xml";
+                case ".ttf":
+                    return "application/x-font-ttf";
                 case ".woff":
                     return "font/woff";
                 case ".woff2":
                     return "font/woff2";
-                case ".png":
-                    return "image/png";
-                case ".jpg":
-                case ".jpeg":
-                    return "image/jpeg";
-                case ".ttf":
-                    return "application/x-font-ttf";
-                case ".css":
-                    return "text/css";
-                case ".js":
-                    return "text/javascript";
             }
             return null;
         }

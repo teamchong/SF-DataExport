@@ -12,9 +12,9 @@ namespace SF_DataExport
         Regex NewLineRegex = new Regex("\\r?\\n");
         ResourceManager Resource {  get; set; }
 
-        public ChromeFinder()
+        public ChromeFinder(ResourceManager resource)
         {
-            Resource = new ResourceManager();
+            Resource = resource;
         }
 
         public (string executablePath, string type) Find(string channel)

@@ -118,8 +118,8 @@ namespace SF_DataExport
             {
                 if (request.Method != HttpMethod.Get)
                 {
-                    await appPage.SetRequestInterceptionAsync(false).GoOn();
                     IsRequestInterception = false;
+                    await appPage.SetRequestInterceptionAsync(false).GoOn();
                 }
                 else if (IsRequestInterception)
                 {
@@ -137,8 +137,8 @@ namespace SF_DataExport
                     {
                         await request.AbortAsync();
                     }
-                }).Catch((Exception _) => Observable.Return(Unit.Default));
-            }))
+                });
+            }).Catch((Exception _) => Observable.Return(Unit.Default)))
             .SubscribeOn(TaskPoolScheduler.Default);
         }
 
@@ -198,10 +198,10 @@ namespace SF_DataExport
                 case OAuth.REDIRECT_URI:
                 case OAuth.REDIRECT_URI_SANDBOX:
                     await Observable.FromAsync(async () =>
-                    {
-                        await appPage.SetRequestInterceptionAsync(true).GoOn();
-                        IsRequestInterception = true;
-                    })
+                        {
+                            await appPage.SetRequestInterceptionAsync(true).GoOn();
+                            IsRequestInterception = true;
+                        })
                         .SelectMany(_ => PageInterception(appPage, () => e.Request.RespondAsync(new ResponseData
                         {
                             Status = HttpStatusCode.Created,
@@ -212,7 +212,7 @@ namespace SF_DataExport
                         .SubscribeOn(TaskPoolScheduler.Default);
                     break;
                 case var url when Resource.IsLoginUrl(url) && url.Contains(".salesforce.com/assets/icons/"):
-                    var iconPath = "icons/" + e.Request.Url.Split(".salesforce.com/assets/icons/", 2).Last();
+                    var iconPath = "icons/" + e.Request.Url.Split(".salesforce.com/assets/icons/", 2).Last().Split('?').First();
                     var icon = Resource.GetResourceBytes(iconPath);
                     if (icon != null)
                         await PageInterception(appPage, () => e.Request.RespondAsync(new ResponseData
@@ -225,7 +225,7 @@ namespace SF_DataExport
                         await PageInterception(appPage, () => e.Request.ContinueAsync(), e.Request);
                     break;
                 case var url when Resource.IsLoginUrl(url) && url.Contains(".salesforce.com/assets/images/"):
-                    var imgPath = "images/" + e.Request.Url.Split(".salesforce.com/assets/images/", 2).Last();
+                    var imgPath = "images/" + e.Request.Url.Split(".salesforce.com/assets/images/", 2).Last().Split('?').First();
                     var img = Resource.GetResourceBytes(imgPath);
                     if (img != null)
                         await PageInterception(appPage, () => e.Request.RespondAsync(new ResponseData
@@ -238,7 +238,7 @@ namespace SF_DataExport
                         await PageInterception(appPage, () => e.Request.ContinueAsync(), e.Request);
                     break;
                 case var url when Resource.IsLoginUrl(url) && url.Contains(".salesforce.com/fonts/"):
-                    var fntPath = "fonts/" + e.Request.Url.Split(".salesforce.com/fonts/", 2).Last();
+                    var fntPath = "fonts/" + e.Request.Url.Split(".salesforce.com/fonts/", 2).Last().Split('?').First();
                     var fnt = Resource.GetResourceBytes(fntPath);
                     if (fnt != null)
                         await PageInterception(appPage, () => e.Request.RespondAsync(new ResponseData
@@ -252,13 +252,13 @@ namespace SF_DataExport
                     break;
                 case var url when Resource.IsLoginUrl(url) && url.Count(c => c == '/') == 3 && !url.EndsWith('/'):
                     var path = e.Request.Url.Split('/').LastOrDefault();
-                    var file = Resource.GetResource(path);
+                    var file = Resource.GetResourceBytes(path);
                     if (file != null)
                         await PageInterception(appPage, () => e.Request.RespondAsync(new ResponseData
                         {
                             Status = HttpStatusCode.OK,
                             ContentType = Resource.GetContentType(path),
-                            Body = file
+                            BodyData = file
                         }), e.Request);
                     else
                         await PageInterception(appPage, () => e.Request.ContinueAsync(), e.Request);
@@ -284,12 +284,16 @@ namespace SF_DataExport
                                 await PageInterception(appPage, () => e.Request.ContinueAsync(), e.Request);
                         }
                     })
-                    .Catch((Exception ex) => Observable.FromAsync(() => e.Request.AbortAsync()).Catch((Exception _) => Observable.Return(Unit.Default)))
+                    .Catch((Exception ex) => Observable.FromAsync(async () =>
+                    {
+                        if (IsRequestInterception)
+                        {
+                            await e.Request.RespondAsync(new ResponseData {
+                                Status = HttpStatusCode.Accepted
+                            });
+                        }
+                    }).Catch((Exception _) => Observable.Return(Unit.Default)))
                     .SubscribeOn(TaskPoolScheduler.Default);
-                    break;
-                case var url when !string.IsNullOrEmpty((string)AppState.Value["currentInstanceUrl"]) && url.StartsWith((string)AppState.Value["currentInstanceUrl"]):
-                    Resource.OpenIncognitoBrowser((string)AppState.Value["currentInstanceUrl"], url.Substring(((string)AppState.Value["currentInstanceUrl"]).Length),
-                        AppSettings, OrgSettings);
                     break;
                 default:
                     await PageInterception(appPage, () => e.Request.ContinueAsync(), e.Request);

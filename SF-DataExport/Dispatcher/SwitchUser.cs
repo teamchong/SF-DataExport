@@ -34,7 +34,6 @@ namespace SF_DataExport.Dispatcher
                 var refreshToken = (string)orgSettings.Get(o => o[instanceUrl]?[OAuth.REFRESH_TOKEN]) ?? "";
                 var id = (string)orgSettings.Get(o => o[instanceUrl]?[OAuth.ID]) ?? "";
                 var targetUrl = resource.GetLoginUrlAs(instanceUrl, id, userId, "/");
-                var urlWithAccessCode = resource.GetUrlViaAccessToken(instanceUrl, accessToken, targetUrl);
 
                 await resource.RunClientAsUserAsync((httpClient, cookieContainer, htmlContent) =>
                 {

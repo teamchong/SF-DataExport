@@ -47,8 +47,8 @@ namespace SF_DataExport
                 ["currentInstanceUrl"] = "",
                 ["exportCount"] = null,
                 ["exportEmails"] = "",
-                ["exportPath"] = AppDomain.CurrentDomain.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar),
-                ["exportPathItems"] = new JArray(AppDomain.CurrentDomain.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar)),
+                ["exportPath"] = Resource.DefaultDirectory.TrimEnd(Path.DirectorySeparatorChar),
+                ["exportPathItems"] = new JArray(Resource.DefaultDirectory.TrimEnd(Path.DirectorySeparatorChar)),
                 ["exportResult"] = "",
                 ["exportResultFiles"] = new JArray(),
                 ["isLoading"] = false,
@@ -155,6 +155,9 @@ namespace SF_DataExport
                             break;
                         case "viewDownloadExports":
                             new ViewDownloadExports().Dispatch(payload, this, Resource, AppSettings, OrgSettings);
+                            break;
+                        case "viewPage":
+                            new ViewPage().Dispatch((string)payload, this, Resource, AppSettings, OrgSettings);
                             break;
                         case "viewUserPage":
                             new ViewUserPage().Dispatch(payload, this, Resource, AppSettings, OrgSettings);
@@ -383,7 +386,7 @@ namespace SF_DataExport
         {
             if (string.IsNullOrEmpty(newDirectoryPath))
             {
-                newDirectoryPath = AppContext.BaseDirectory;
+                newDirectoryPath = Resource.DefaultDirectory;
             }
             var newFilePath = Path.Combine(newDirectoryPath, AppConstants.JSON_ORG_SETTINGS);
 

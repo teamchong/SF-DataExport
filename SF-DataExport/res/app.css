@@ -2,9 +2,9 @@
     display: none;
 }
 
-#chart-container i.fa {
+/*#chart-container i.fa {
     display: none !important;
-}
+}*/
 
 #chart-container .material-icons {
     vertical-align: middle;
@@ -12,14 +12,11 @@
 
 #chart-container .node {
     cursor: pointer;
+    position: relative;
 }
 
-    #chart-container .node .content {
-        position: relative;
-    }
-
     #chart-container .node .users {
-        display: none;
+        display: block;
         -ms-transform: rotate(-90deg) translate(-40px, -40px) rotateY(180deg);
         -moz-transform: rotate(-90deg) translate(-40px, -40px) rotateY(180deg);
         -webkit-transform: rotate(-90deg) translate(-40px, -40px) rotateY(180deg);
@@ -29,18 +26,19 @@
         -webkit-transform-origin: top center;
         transform-origin: top center;
         position: absolute;
-        overflow: visible;
+        overflow: hidden;
         z-index: 1;
         background: #fff;
         border: 1px solid #ccc;
         border-radius: 5px;
-        left: 30px;
-        top: 15px;
+        margin-top: 22px;
+        height: auto;
+        opacity: 0;
     }
 
-    #chart-container .node.hover .users {
-        display: block;
-    }
+        #chart-container .node:hover .users {
+            opacity: 1;
+        }
 
     #chart-container .node .users .slds-truncate {
         display: block;
@@ -77,7 +75,7 @@
 
         #user-photos-div a img {
             margin: 5px;
-            margin-bottom: 25px;
+            margin-bottom: 60px;
             transition: all 1s;
         }
 
