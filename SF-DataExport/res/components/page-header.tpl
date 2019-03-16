@@ -64,7 +64,7 @@
                         </v-list-tile-action>
                         <v-list-tile-content>
                             <v-list-tile-title>{{data.item.label}}</v-list-tile-title>
-                            <v-list-tile-sub-title>{{data.item.name}}</v-list-tile-sub-title>
+                            <v-list-tile-sub-title>{{data.item.name}} <span class="slds-badge" v-if="data.item.type!='data'">{{data.item.type}}</span></v-list-tile-sub-title>
                         </v-list-tile-content>
                     </template>
                 </template>
@@ -89,12 +89,12 @@
         <div class="slds-global-header__item" v-if="currentInstanceUrl" style="padding-left:0;">
             <div class="slds-dropdown-trigger slds-dropdown-trigger_click">
                 <section :class="['slds-popover','slds-nubbin_top-right',showUserPopover?'':'slds-popover_hide']" role="dialog" style="position:absolute;top:3.2em;right:-0.8em;">
-                    <button class="slds-button slds-button_icon slds-button_icon-small slds-float_right slds-popover__close" title="Close dialog"
+                    <button class="slds-button slds-button_icon slds-button_icon-small slds-float_right slds-popover__close" title="Close"
                             @click="dispatch('showUserPopover',false)">
                         <svg class="slds-button__icon">
                             <use xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="/assets/icons/utility-sprite/svg/symbols.svg#close" />
                         </svg>
-                        <span class="slds-assistive-text">Close dialog</span>
+                        <span class="slds-assistive-text">Close</span>
                     </button>
                     <div class="slds-popover__body" id="dialog-body-id-6">
                         <div :style="{visibility:!userItems.length?'visible':'hidden'}">
