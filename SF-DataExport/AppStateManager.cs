@@ -225,7 +225,7 @@ namespace SF_DataExport
                     return Observable.Return(newState);
                 }))
                 .Where(state => state?.HasValues == true)
-                .Buffer(TimeSpan.FromMilliseconds(100))
+                .Buffer(TimeSpan.FromMilliseconds(50))
                 .Where(newStates => newStates.Any())
                 .SelectMany(newStates =>
                     Observable.If(() => Resource.IsRedirectPage(appPage.Url),

@@ -6,7 +6,7 @@
 
     const dispatch$ = new Subject();
     dispatch$.pipe(
-        bufferTime(100),
+        bufferTime(50),
         filter(actions => !!actions.length),
         concatMap(actions => defer(async () => {
             const newState = await subscribeDispatch(actions);

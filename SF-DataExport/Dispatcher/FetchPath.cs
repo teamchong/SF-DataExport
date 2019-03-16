@@ -1,23 +1,8 @@
-﻿using DotNetForce;
-using HtmlAgilityPack;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
-using PuppeteerSharp;
+﻿using Newtonsoft.Json.Linq;
 using System;
-using System.Collections.Generic;
 using System.IO;
-using System.IO.Compression;
 using System.Linq;
-using System.Net;
-using System.Net.Http;
-using System.Reactive.Concurrency;
 using System.Reactive.Linq;
-using System.Reactive.Subjects;
-using System.Text.RegularExpressions;
-using System.Threading;
-using System.Threading.Tasks;
-using System.Web;
-using Unit = System.Reactive.Unit;
 
 namespace SF_DataExport.Dispatcher
 {
@@ -26,33 +11,39 @@ namespace SF_DataExport.Dispatcher
         public void Dispatch(JToken payload, AppStateManager appState)
         {
             var search = ((string)payload?["search"])?.Trim() ?? "";
-            var value = ((string)payload?["value"]) ?? "";
             var field = ((string)payload?["field"]) ?? "";
 
             if (search != "" && field != "")
             {
                 try
                 {
-                    if (Directory.Exists(search))
+                    var searchDir = new DirectoryInfo(search);
+
+                    if (searchDir.Exists)
                     {
                         appState.Commit(new JObject
                         {
-                            [field] = new JArray(new[] { value }.Where(s => s != "")
-                                .Concat(Directory.GetFiles(search)).Distinct())
+                            [field] = new JArray(new[] { TrimDir(searchDir.Parent.FullName) }
+                                .Concat(searchDir.GetFiles().Select(f => f.FullName))
+                                .Concat(searchDir.GetDirectories().Select(d => TrimDir(d.FullName)))
+                                .Where(s => s != "").Distinct())
                         });
                         return;
                     }
                     else
                     {
-                        var dir = Path.GetDirectoryName(search);
-                        if (Directory.Exists(dir))
+                        var fi = new FileInfo(search);
+
+                        if (fi.Directory.Exists)
                         {
-                            if (File.Exists(search))
+                            if (fi.Exists)
                             {
                                 appState.Commit(new JObject
                                 {
-                                    [field] = new JArray(new[] { search, value }.Where(s => s != "")
-                                    .Concat(Directory.GetFiles(dir)).Distinct())
+                                    [field] = new JArray(new[] { fi.FullName, TrimDir(fi.Directory.FullName) }
+                                        .Concat(fi.Directory.GetFiles().Where(f => MatchFile(f, fi.Name)).Select(f => f.FullName))
+                                        .Concat(fi.Directory.GetDirectories().Where(d => MatchDir(d, fi.Name)).Select(d => TrimDir(d.FullName)))
+                                        .Where(s => s != "").Distinct())
                                 });
                                 return;
                             }
@@ -60,8 +51,10 @@ namespace SF_DataExport.Dispatcher
                             {
                                 appState.Commit(new JObject
                                 {
-                                    [field] = new JArray(new[] { value }.Where(s => s != "")
-                                    .Concat(Directory.GetDirectories(dir)).Distinct())
+                                    [field] = new JArray(new[] { TrimDir(fi.Directory.FullName) }
+                                        .Concat(fi.Directory.GetFiles().Where(f => MatchFile(f, fi.Name)).Select(f => f.FullName))
+                                        .Concat(fi.Directory.GetDirectories().Where(d => MatchDir(d, fi.Name)).Select(d => TrimDir(d.FullName)))
+                                        .Where(s => s != "").Distinct())
                                 });
                                 return;
                             }
@@ -70,7 +63,23 @@ namespace SF_DataExport.Dispatcher
                 }
                 catch { }
             }
-            appState.Commit(new JObject { [field] = new JArray(new[] { value }.Where(s => s != "")) });
+            appState.Commit(new JObject { [field] = new JArray() });
+            
+            
+            string TrimDir(string dir)
+            {
+                return (dir?.Trim().TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) ?? "") + Path.DirectorySeparatorChar;
+            }
+
+            bool MatchFile(FileInfo f, string filterText)
+            {
+                return !string.IsNullOrEmpty(filterText) && f.Name.Contains(filterText, StringComparison.CurrentCultureIgnoreCase);
+            }
+
+            bool MatchDir(DirectoryInfo di, string filterText)
+            {
+                return !string.IsNullOrEmpty(filterText) && di.Name.Contains(filterText, StringComparison.CurrentCultureIgnoreCase);
+            }
         }
     }
 }
