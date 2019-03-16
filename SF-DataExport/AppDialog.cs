@@ -240,11 +240,16 @@ namespace SF_DataExport
                 case var url when Resource.IsLoginUrl(url) && url.Contains(".salesforce.com/components/"):
                     var componentPath = "components/" + e.Request.Url.Split(".salesforce.com/components/", 2).Last().Split('?').First();
                     var component = Resource.GetResource(componentPath);
-                    if (!string.IsNullOrEmpty(component)) {
-                        var componentTpl = Resource.GetResource(Path.GetFileNameWithoutExtension(componentPath) + ".tpl");
+                    if (!string.IsNullOrEmpty(component))
+                    {
+                        var componentTpl = Resource.GetResource(componentPath.Remove(componentPath.Length - Path.GetExtension(componentPath).Length) + ".tpl");
                         if (!string.IsNullOrEmpty(componentTpl))
                         {
-                            component = "const template=`" + componentTpl + "`;";
+                            component = string.Join("", "(function(template){", component, "})(`", componentTpl, "`)");
+                        }
+                        else
+                        {
+                            component = string.Join("", "(function(){", component, "})()");
                         }
                         await PageInterception(appPage, () => e.Request.RespondAsync(new ResponseData
                         {
@@ -307,7 +312,8 @@ namespace SF_DataExport
                     {
                         if (IsRequestInterception)
                         {
-                            await e.Request.RespondAsync(new ResponseData {
+                            await e.Request.RespondAsync(new ResponseData
+                            {
                                 Status = HttpStatusCode.Accepted
                             });
                         }
