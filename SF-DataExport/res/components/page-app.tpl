@@ -40,6 +40,17 @@
                         </span>Org Limits
                     </a>
                 </li>
+                <li :class="['slds-tabs_default__item',tab=='data'?'slds-is-active':'']" title="Data Import/Export">
+                    <a class="slds-tabs_default__link" href="javascript:void(0);" role="tab" tabindex="0" @click="dispatch('tab','data')">
+                        <span class="slds-tabs__left-icon">
+                            <span class="slds-icon_container slds-icon-standard-datadotcom" title="Data Import/Export">
+                                <svg class="slds-icon slds-icon_small">
+                                    <use xlink:href="/assets/icons/standard-sprite/svg/symbols.svg#datadotcom"></use>
+                                </svg>
+                            </span>
+                        </span>Data Import/Export
+                    </a>
+                </li>
                 <li :class="['slds-tabs_default__item',tab=='downloaddataexport'?'slds-is-active':'']" title="Download Data Export">
                     <a class="slds-tabs_default__link" href="javascript:void(0);" role="tab" tabindex="0" @click="dispatch('tab','downloaddataexport')">
                         <span class="slds-tabs__left-icon">
@@ -71,6 +82,9 @@
             </div>
             <div :class="['slds-tabs_default__content',tab=='limits'?'slds-show':'slds-hide']" style="padding:1em;">
                 <limits-tab></limits-tab>
+            </div>
+            <div :class="['slds-tabs_default__content',tab=='data'?'slds-show':'slds-hide']" style="padding:1em;">
+                <data-tab></data-tab>
             </div>
             <div :class="['slds-tabs_default__content',tab=='downloaddataexport'?'slds-show':'slds-hide']" style="padding:1em;">
                 <download-dataexport-tab></download-dataexport-tab>

@@ -42,6 +42,7 @@ namespace SF_DataExport
 <script src='/vue.js'></script>
 <script src='/vuex.js'></script>
 <script src='/vuetify.js'></script>
+<script src='/lodash.js'></script>
 <script src='/rxjs.js'></script>
 <script src='/orgchart.js'></script>
 </head>

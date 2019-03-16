@@ -12,14 +12,16 @@
     <ApplicationIcon>favicon.ico</ApplicationIcon>
     <StartupObject />
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <Version>1.0.0.19038</Version>
+    <Version>1.0.0.19039</Version>
     <RepositoryUrl>https://github.com/ste80/sf-dataexport</RepositoryUrl>
-    <RepositoryType>git</RepositoryType>
+    <RepositoryType>GIT</RepositoryType>
     <PackageProjectUrl>https://github.com/ste80/sf-dataexport</PackageProjectUrl>
     <Description>Tool for download export data from salesforce.</Description>
     <PackageLicenseUrl></PackageLicenseUrl>
     <PackageTags>salesforce</PackageTags>
     <PackageReleaseNotes>https://raw.githubusercontent.com/ste80/SF-DataExport/master/README.md</PackageReleaseNotes>
+    <Copyright>2019 Steven Chong</Copyright>
+    <PackageIconUrl>https://github.com/ste80/SF-DataExport/raw/master/SF-DataExport/res/favicon.ico</PackageIconUrl>
   </PropertyGroup>
 
   <ItemGroup>
@@ -27,9 +29,7 @@
     <PackageReference Include="HtmlAgilityPack" Version="1.9.2" />
     <PackageReference Include="Microsoft.Extensions.CommandLineUtils" Version="1.1.1" />
     <PackageReference Include="PuppeteerSharp" Version="1.12.1" />
-    <PackageReference Include="System.Net.Http" Version="4.3.4" />
     <PackageReference Include="System.Reactive" Version="4.1.3" />
-    <PackageReference Include="System.Security.Cryptography.Algorithms" Version="4.3.1" />
   </ItemGroup>
 
   <ItemGroup>
@@ -37,18 +37,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Remove="res\components\button-iconleft.tpl" />
-    <None Remove="res\components\download-dataexport-tab.tpl" />
-    <None Remove="res\components\limits-tab.tpl" />
-    <None Remove="res\components\org-chart.tpl" />
-    <None Remove="res\components\organization-modal.tpl" />
-    <None Remove="res\components\overview-tab.tpl" />
-    <None Remove="res\components\page-app.tpl" />
-    <None Remove="res\components\page-header.tpl" />
-    <None Remove="res\components\photos-tab.tpl" />
-    <None Remove="res\components\setup-tab.tpl" />
-    <None Remove="res\components\spinner.tpl" />
-    <None Remove="res\components\v-modal.tpl" />
+    <None Remove="res\components\data-tab.js" />
+    <None Remove="res\components\data-tab.tpl" />
+    <None Remove="res\lodash.js" />
   </ItemGroup>
 
 </Project>

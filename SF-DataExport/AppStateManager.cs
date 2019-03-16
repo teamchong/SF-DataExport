@@ -62,6 +62,7 @@ namespace SF_DataExport
                 ["showOrgModal"] = true,
                 ["showUserPopover"] = false,
                 ["tab"] = "overview", //"downloaddataexport", //"setup"
+                ["toolingObjects"] = new JArray(),
                 ["userId"] = "",
                 ["userIdAs"] = "",
                 ["userLicenses"] = new JArray(),
@@ -325,6 +326,7 @@ namespace SF_DataExport
                 ["showOrgModal"] = false,
                 ["objects"] = new JArray(),
                 ["orgLimits"] = new JObject(),
+                ["toolingObjects"] = new JArray(),
                 ["userId"] = userId,
                 ["userIdAs"] = userId,
                 ["userLicenses"] = new JArray(),
@@ -373,6 +375,14 @@ namespace SF_DataExport
                     Commit(new JObject
                     {
                         ["objects"] = new JArray(obj.SObjects),
+                    });
+                }))),
+                Observable.FromAsync(() => client.Tooling.GetObjectsAsync<JObject>())
+                .SelectMany(obj => Observable.Defer(() => Observable.Start(() =>
+                {
+                    Commit(new JObject
+                    {
+                        ["toolingObjects"] = new JArray(obj.SObjects),
                     });
                 })))
             )

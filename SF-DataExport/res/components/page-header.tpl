@@ -32,12 +32,13 @@
                     <span class="slds-assistive-text">Close dialog</span>
                 </button>
                 <div class="slds-popover__body" id="dialog-body-id-6">
+					<span class="slds-badge" v-if="objectType!='data'">{{objectType}}</span>
                     <div>Label: {{objectLabel}}</div>
                     <div>Name: {{objectName}}</div>
-                    <div v-if="objectPrefix">Prefix: {{objectPrefix}}</div>
-                    <div v-if="objectOverviewPage"><a href="javascript:void(0)" @click="dispatch('viewPage',objectOverviewPage)">Overview page</a></div>
-                    <div v-if="objectListPage"><a href="javascript:void(0)" @click="dispatch('viewPage',objectListPage)">List page</a></div>
-                    <div v-if="objectSetupPage"><a href="javascript:void(0)" @click="dispatch('viewPage',objectSetupPage)">Setup page</a></div>
+                    <div v-if="objectType=='data'&&objectPrefix">Prefix: {{objectPrefix}}</div>
+                    <div v-if="objectType=='data'&&objectOverviewPage"><a href="javascript:void(0)" @click="dispatch('viewPage',objectOverviewPage)">Overview page</a></div>
+                    <div v-if="objectType=='data'&&objectListPage"><a href="javascript:void(0)" @click="dispatch('viewPage',objectListPage)">List page</a></div>
+                    <div v-if="objectType=='data'&&objectSetupPage"><a href="javascript:void(0)" @click="dispatch('viewPage',objectSetupPage)">Setup page</a></div>
                 </div>
             </section>
             <v-autocomplete v-model="globalSearch" :items="globalSearchItems" dense :filter="globalSearchFilter"
@@ -50,7 +51,7 @@
                     <template v-else>
                         <b style="font-weight:bold;display:inline-block;margin-right:10px;">{{data.item.keyPrefix|empty('---')}}</b>
                         <span style="display:inline-block;margin-right:10px;">{{data.item.label}}</span>
-                        <span style="color:#ccc;display:inline-block">{{data.item.name}}</span>
+                        <span style="color:#ccc;display:inline-block">{{data.item.name}} <span class="slds-badge" v-if="data.item.type!='data'">{{data.item.type}}</span></span>
                     </template>
                 </template>
                 <template #item="data">

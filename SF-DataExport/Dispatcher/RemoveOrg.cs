@@ -47,6 +47,7 @@ namespace SF_DataExport.Dispatcher
                         ["orgLimits"] = new JObject(),
                         ["popoverUserId"] = "",
                         ["showOrgModal"] = true,
+                        ["toolingObjects"] = new JArray(),
                         ["userId"] = "",
                         ["userIdAs"] = "",
                         ["userLicenses"] = new JArray(),

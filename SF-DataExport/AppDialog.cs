@@ -10,9 +10,7 @@ using System.Net;
 using System.Net.Http;
 using System.Reactive.Concurrency;
 using System.Reactive.Linq;
-using System.Reactive.Threading.Tasks;
 using System.Reactive.Subjects;
-using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Web;
 using Unit = System.Reactive.Unit;
@@ -109,8 +107,7 @@ namespace SF_DataExport
             appPage.RequestFailed += Page_RequestFailed;
             //appPage.DOMContentLoaded += Page_DOMContentLoaded;
         }
-
-
+        
 
         IObservable<Unit> PageInterception(Page appPage, Func<Task> funcAsync, Request request)
         {
@@ -308,16 +305,7 @@ namespace SF_DataExport
                                 await PageInterception(appPage, () => e.Request.ContinueAsync(), e.Request);
                         }
                     })
-                    .Catch((Exception ex) => Observable.FromAsync(async () =>
-                    {
-                        if (IsRequestInterception)
-                        {
-                            await e.Request.RespondAsync(new ResponseData
-                            {
-                                Status = HttpStatusCode.Accepted
-                            });
-                        }
-                    }).Catch((Exception _) => Observable.Return(Unit.Default)))
+                    .Retry(1).Catch((Exception _) => Observable.Return(Unit.Default))
                     .SubscribeOn(TaskPoolScheduler.Default);
                     break;
                 default:

@@ -13,9 +13,10 @@
             }
             const filteredUsers = [];
             const usersLen = users ? users.length : 0;
+            const filterEx = filter ? new RegExp(_.escapeRegExp(filter), 'i') : null;
             for (let i = 0; i < usersLen; i++) {
                 const user = users[i];
-                if (!filter || user.Name && user.Name.indexOf(filter) >= 0 || user.Email && user.Email.indexOf(filter) >= 0) {
+                if (!filterEx || user.Name && filterEx.test(user.Name) || user.Email && filterEx.test(user.Email)) {
                     filteredUsers.push(user);
                 }
             }
