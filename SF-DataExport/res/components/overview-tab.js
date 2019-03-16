@@ -1,5 +1,8 @@
 ﻿Vue.component('overview-tab', {
     template,
+    data() {
+        return { loadTime: new Date().getTime() };
+    },
     methods: {
         filterOrgChart({ children, id, name, url, users }, filter) {
             const filteredChildren = [];
@@ -24,6 +27,9 @@
                 return { children: filteredChildren, id, name, url, users: filteredUsers };
             }
             return null;
+        },
+        reload() {
+            this.loadTime = new Date().getTime();
         }
     },
     computed: {
@@ -32,11 +38,12 @@
         },
         data() {
             const { orgChartSearch, userRoles } = this.$store.state;
-            const filtered = this.filterOrgChart(userRoles, orgChartSearch);
+            let filtered = this.filterOrgChart(userRoles, orgChartSearch);
             if (!filtered) {
                 const { id, name, url } = userRoles;
-                return { id, name, url };
+                filtered = { id, name, url };
             }
+            filtered.loadTime = this.loadTime;
             return filtered;
         },
         orgChartSearch: {

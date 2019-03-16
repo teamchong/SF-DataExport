@@ -27,7 +27,7 @@
         <div class="slds-form-element" v-if="currentInstanceUrl && data.name">
             <div class="slds-form-element__control slds-input-has-icon slds-input-has-icon_right">
                 <input placeholder="Search User" class="slds-input" type="text" v-model="orgChartSearch" />
-                <button class="slds-button slds-button_icon slds-input__icon slds-input__icon_right" title="Reset" @click="dispatch('orgChartSearch',' ');dispatch('orgChartSearch','')">
+                <button class="slds-button slds-button_icon slds-input__icon slds-input__icon_right" title="Reset" @click="reload()">
                     <svg class="slds-button__icon slds-icon-text-light">
                         <use xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="/assets/icons/action-sprite/svg/symbols.svg#reset_password" />
                     </svg>
