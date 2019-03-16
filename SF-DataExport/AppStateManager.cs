@@ -52,7 +52,7 @@ namespace SF_DataExport
                 ["exportResult"] = "",
                 ["exportResultFiles"] = new JArray(),
                 ["isLoading"] = false,
-                ["globalSearch"] = "",
+                ["globalSearch"] = null,
                 ["objects"] = new JArray(),
                 ["orgLimits"] = new JObject(),
                 ["orgChartSearch"] = "",

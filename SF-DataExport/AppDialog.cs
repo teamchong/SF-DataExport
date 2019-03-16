@@ -237,6 +237,25 @@ namespace SF_DataExport
                     else
                         await PageInterception(appPage, () => e.Request.ContinueAsync(), e.Request);
                     break;
+                case var url when Resource.IsLoginUrl(url) && url.Contains(".salesforce.com/components/"):
+                    var componentPath = "components/" + e.Request.Url.Split(".salesforce.com/components/", 2).Last().Split('?').First();
+                    var component = Resource.GetResource(componentPath);
+                    if (!string.IsNullOrEmpty(component)) {
+                        var componentTpl = Resource.GetResource(Path.GetFileNameWithoutExtension(componentPath) + ".tpl");
+                        if (!string.IsNullOrEmpty(componentTpl))
+                        {
+                            component = "const template=`" + componentTpl + "`;";
+                        }
+                        await PageInterception(appPage, () => e.Request.RespondAsync(new ResponseData
+                        {
+                            Status = HttpStatusCode.OK,
+                            ContentType = Resource.GetContentType(componentPath),
+                            Body = component
+                        }), e.Request);
+                    }
+                    else
+                        await PageInterception(appPage, () => e.Request.ContinueAsync(), e.Request);
+                    break;
                 case var url when Resource.IsLoginUrl(url) && url.Contains(".salesforce.com/fonts/"):
                     var fntPath = "fonts/" + e.Request.Url.Split(".salesforce.com/fonts/", 2).Last().Split('?').First();
                     var fnt = Resource.GetResourceBytes(fntPath);

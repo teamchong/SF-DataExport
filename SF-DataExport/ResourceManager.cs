@@ -366,6 +366,8 @@ namespace SF_DataExport
                     return "text/css";
                 case ".eot":
                     return "application/vnd.ms-fontobject";
+                case ".ico":
+                    return "image/x-icon";
                 case ".jpg":
                 case ".jpeg":
                     return "image/jpeg";
@@ -378,6 +380,8 @@ namespace SF_DataExport
                 case ".svg":
                 case ".svgz":
                     return "image/svg+xml";
+                case ".tpl":
+                    return "text/x-template";
                 case ".ttf":
                     return "application/x-font-ttf";
                 case ".woff":
