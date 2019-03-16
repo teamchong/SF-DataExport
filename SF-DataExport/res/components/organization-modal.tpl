@@ -61,13 +61,12 @@
     <div class="slds-form-element">
         <div class="slds-clearfix">
             <div class="slds-float_right">
-                ss
-                <button class="slds-button slds-button_success" @click="dispatch('setOrgSettingsPath',orgSettingsPath)">PaSave pathtt</button>
+                <button class="slds-button slds-button_success" @click="dispatch('setOrgSettingsPath',orgSettingsPath)">Save path</button>
             </div>
             <label class="slds-form-element__label" for="text-input-id-1">Org settings file path</label>
         </div>
         <div class="slds-form-element__control" style="margin-top:0.1em;">
-            <v-combobox v-model="orgSettingsPath" :items="orgSettingsPathItems" solo dense cache-items hide-no-data no-filter
+            <v-combobox v-model="orgSettingsPath" :items="orgSettingsPathItems" solo dense hide-no-data no-filter
                             id="text-input-id-1" :search-input.sync="fetchOrgSettingsPath"></v-combobox>
         </div>
     </div>

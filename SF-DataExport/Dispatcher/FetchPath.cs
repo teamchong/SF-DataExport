@@ -23,8 +23,7 @@ namespace SF_DataExport.Dispatcher
                     {
                         appState.Commit(new JObject
                         {
-                            [field] = new JArray(new[] { TrimDir(searchDir.Parent.FullName) }
-                                .Concat(searchDir.GetFiles().Select(f => f.FullName))
+                            [field] = new JArray(searchDir.GetFiles().Select(f => f.FullName)
                                 .Concat(searchDir.GetDirectories().Select(d => TrimDir(d.FullName)))
                                 .Where(s => s != "").Distinct())
                         });
@@ -40,7 +39,7 @@ namespace SF_DataExport.Dispatcher
                             {
                                 appState.Commit(new JObject
                                 {
-                                    [field] = new JArray(new[] { fi.FullName, TrimDir(fi.Directory.FullName) }
+                                    [field] = new JArray(new[] { fi.FullName }
                                         .Concat(fi.Directory.GetFiles().Where(f => MatchFile(f, fi.Name)).Select(f => f.FullName))
                                         .Concat(fi.Directory.GetDirectories().Where(d => MatchDir(d, fi.Name)).Select(d => TrimDir(d.FullName)))
                                         .Where(s => s != "").Distinct())
@@ -51,8 +50,7 @@ namespace SF_DataExport.Dispatcher
                             {
                                 appState.Commit(new JObject
                                 {
-                                    [field] = new JArray(new[] { TrimDir(fi.Directory.FullName) }
-                                        .Concat(fi.Directory.GetFiles().Where(f => MatchFile(f, fi.Name)).Select(f => f.FullName))
+                                    [field] = new JArray(fi.Directory.GetFiles().Where(f => MatchFile(f, fi.Name)).Select(f => f.FullName)
                                         .Concat(fi.Directory.GetDirectories().Where(d => MatchDir(d, fi.Name)).Select(d => TrimDir(d.FullName)))
                                         .Where(s => s != "").Distinct())
                                 });

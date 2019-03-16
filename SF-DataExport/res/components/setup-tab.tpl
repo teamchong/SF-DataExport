@@ -29,7 +29,7 @@
                 <label class="slds-form-element__label" for="text-input-id-1">Org settings file path</label>
             </div>
             <div class="slds-form-element__control" style="margin-top:0.1em;">
-                <v-combobox v-model="orgSettingsPath" :items="orgSettingsPathItems" solo dense cache-items hide-no-data no-filter
+                <v-combobox v-model="orgSettingsPath" :items="orgSettingsPathItems" solo dense hide-no-data no-filter
                                 id="text-input-id-1" :search-input.sync="fetchOrgSettingsPath"></v-combobox>
             </div>
         </div>
@@ -38,7 +38,7 @@
                 <label class="slds-form-element__label" for="text-input-id-2">Chrome path</label>
             </div>
             <div class="slds-form-element__control" id="text-input-id-2" style="margin-top:0.1em;">
-                <v-combobox v-model="chromePath" :items="chromePathItems" solo dense cache-items hide-no-data no-filter
+                <v-combobox v-model="chromePath" :items="chromePathItems" solo dense hide-no-data no-filter
                                 id="text-input-id-2" :search-input.sync="fetchChromePath"></v-combobox>
             </div>
         </div>
