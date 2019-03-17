@@ -25,6 +25,16 @@ dotnet tool update -g sf-dataexport
 Usage: sf-dataexport
 ```
 
+Features
+
+ * Display org chart
+ * Display all user profile photo
+ * Quick search and login as any user (UI + command line)
+ * Download prescheduled data export zip files (UI + command line)
+ * Display org api usages and statistic (UI + command line to log data)
+ * Search objects and display page in browser (under construction)
+ * CSV import/export from/to Sales/Excel/CSV/SQL, auto adjust format/time zone (under construction)
+
 ## Prerequisites
 
  * .NET Core 2.1 or later
