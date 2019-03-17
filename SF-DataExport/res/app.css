@@ -10,6 +10,10 @@
     vertical-align: middle;
 }
 
+#chart-container .empty > .lines {
+    display: none;
+}
+
 #chart-container .node {
     cursor: pointer;
     position: relative;
@@ -94,3 +98,10 @@
             text-overflow: ellipsis;
             text-align: center;
         }
+
+.slds-modal__container {
+    padding-bottom: 1vh;
+}
+.slds-modal__footer:empty {
+    display: none;
+}

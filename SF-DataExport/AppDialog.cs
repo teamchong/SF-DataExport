@@ -73,11 +73,20 @@ namespace SF_DataExport
             launchOpts.ExecutablePath = chromePath;
             launchOpts.Headless = !string.IsNullOrEmpty(command);
             launchOpts.DefaultViewport = null;
-            launchOpts.IgnoreHTTPSErrors = true;
+            launchOpts.IgnoreHTTPSErrors = false;
             launchOpts.DumpIO = false;
             launchOpts.Args = new string[] { string.Join(" ", new [] {
                 $"--force-app-mode",
-                $"--disable-extensions",
+                //$"--disable-extensions",
+                $"--bwsi", //Indicates that the browser is in "browse without sign-in" (Guest session) mode. Should completely disable extensions, sync and bookmarks. 
+                $"--no-first-run",
+                $"--disable-default-apps",
+                $"--disable-dev-shm-usage",
+                $"--disable-crash-reporter",
+                $"--disable-breakpad",
+                $"--disable-gpu",
+                $"--no-sandbox",
+                //$"--no-experiments",
                 //$"--enable-experimental-accessibility-features",
                 //$"--no-sandbox",
                 //$"--disable-web-security",
@@ -352,11 +361,13 @@ namespace SF_DataExport
                                 {
                                     AppState.Commit(new JObject
                                     {
+                                        ["alertMessage"] = $"Login fail (REST)\n${ex.Message}",
                                         ["currentAccessToken"] = "",
                                         ["currentId"] = "",
                                         ["currentInstanceUrl"] = "",
+                                        ["showLimitsModal"] = false,
                                         ["showOrgModal"] = true,
-                                        ["alertMessage"] = $"Login fail (REST)\n${ex.Message}"
+                                        ["showPhotosModal"] = false,
                                     });
                                     Console.WriteLine($"Login fail (REST)\n${ex.Message}");
                                 }
@@ -365,11 +376,13 @@ namespace SF_DataExport
                             {
                                 AppState.Commit(new JObject
                                 {
+                                    ["alertMessage"] = $"Login fail ({newOrg["error"]})\n${newOrg["error_description"]}",
                                     ["currentAccessToken"] = "",
                                     ["currentId"] = "",
                                     ["currentInstanceUrl"] = "",
+                                    ["showLimitsModal"] = false,
                                     ["showOrgModal"] = true,
-                                    ["alertMessage"] = $"Login fail ({newOrg["error"]})\n${newOrg["error_description"]}"
+                                    ["showPhotosModal"] = false,
                                 });
                                 Console.WriteLine($"Login fail ({newOrg["error"]})\n${newOrg["error_description"]}");
                             }
@@ -377,11 +390,13 @@ namespace SF_DataExport
                             {
                                 AppState.Commit(new JObject
                                 {
+                                    ["alertMessage"] = $"Login fail (Unknown)\n${newOrg}",
                                     ["currentAccessToken"] = "",
                                     ["currentId"] = "",
                                     ["currentInstanceUrl"] = "",
+                                    ["showLimitsModal"] = false,
                                     ["showOrgModal"] = true,
-                                    ["alertMessage"] = $"Login fail (Unknown)\n${newOrg}"
+                                    ["showPhotosModal"] = false,
                                 });
                                 Console.WriteLine($"Login fail (Unknown)\n${newOrg}");
                             }
@@ -393,7 +408,9 @@ namespace SF_DataExport
                                 ["currentAccessToken"] = "",
                                 ["currentId"] = "",
                                 ["currentInstanceUrl"] = "",
-                                ["showOrgModal"] = true
+                                ["showLimitsModal"] = false,
+                                ["showOrgModal"] = true,
+                                ["showPhotosModal"] = false,
                             });
                         }
                         return Resource.GetRedirectUrlByLoginUrl(url);

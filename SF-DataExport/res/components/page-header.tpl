@@ -23,15 +23,14 @@
             </h1>
         </div>
         <div class="slds-global-header__item slds-global-header__item_search" style="flex-grow:1;position:relative;">
-            <section :class="['slds-popover','slds-nubbin_top-right',globalSearch?'':'slds-popover_hide']" role="dialog" style="position:absolute;top:3.4em;right:-0.8em;">
-                <button class="slds-button slds-button_icon slds-button_icon-small slds-float_right slds-popover__close" title="Close dialog"
+            <section :class="['slds-popover','slds-nubbin_top-right',globalSearch?'':'slds-popover_hide']" style="position:absolute;top:3.4em;right:-0.8em;">
+                <button class="slds-button slds-button_icon slds-button_icon-small slds-float_right slds-popover__close" title="Close"
                         @click="dispatch('globalSearch',null)">
                     <svg class="slds-button__icon">
                         <use xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="/assets/icons/utility-sprite/svg/symbols.svg#close" />
                     </svg>
-                    <span class="slds-assistive-text">Close dialog</span>
                 </button>
-                <div class="slds-popover__body" id="dialog-body-id-6">
+                <div class="slds-popover__body">
 					<span class="slds-badge" v-if="objectType!='data'">{{objectType}}</span>
                     <div>Label: {{objectLabel}}</div>
                     <div>Name: {{objectName}}</div>
@@ -70,6 +69,21 @@
                 </template>
             </v-autocomplete>
         </div>
+        <div class="slds-global-header__item" v-if="currentInstanceUrl" style="padding-right:0;">
+            <h1>
+                <v-autocomplete v-model="popoverUserId" :auto-select-first="true" :items="userItems" dense
+					:clearable="true" placeholder="&lt;select salesforce user&gt;"></v-autocomplete>
+            </h1>
+        </div>
+        <div class="slds-global-header__item" v-if="currentInstanceUrl" style="padding-left:0;">
+            <div class="slds-dropdown-trigger slds-dropdown-trigger_click">
+                <button class="slds-button slds-global-actions__avatar slds-global-actions__item-action" @click="dispatch('popoverUserId',userIdAs)">
+                    <span class="slds-avatar slds-avatar_circle slds-avatar_medium">
+                        <img :alt="userName" :src="userThumbnail|empty('/assets/images/avatar2.jpg')" :title="userName" />
+                    </span>
+                </button>
+            </div>
+        </div>
         <div class="slds-global-header__item">
             <a class="slds-box slds-theme_default slds-global-actions__setup slds-global-actions__item-action"
                 title="GitHub Page" style="padding:0.5em;white-space:nowrap" href="https://github.com/ste80/sf-dataexport" target="_blank">
@@ -78,62 +92,6 @@
                     <use xlink:href="/assets/icons/standard-sprite/svg/symbols.svg#question_best"></use>
                 </svg>
             </a>
-        </div>
-        <div class="slds-global-header__item" v-if="currentInstanceUrl" style="padding-right:0;">
-            <h1>
-                <a href="javascript:void(0" @click="dispatch('showUserPopover',true)">
-                    {{userDisplayName}} {{userEmail}}
-                </a>
-            </h1>
-        </div>
-        <div class="slds-global-header__item" v-if="currentInstanceUrl" style="padding-left:0;">
-            <div class="slds-dropdown-trigger slds-dropdown-trigger_click">
-                <section :class="['slds-popover','slds-nubbin_top-right',showUserPopover?'':'slds-popover_hide']" role="dialog" style="position:absolute;top:3.2em;right:-0.8em;">
-                    <button class="slds-button slds-button_icon slds-button_icon-small slds-float_right slds-popover__close" title="Close"
-                            @click="dispatch('showUserPopover',false)">
-                        <svg class="slds-button__icon">
-                            <use xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="/assets/icons/utility-sprite/svg/symbols.svg#close" />
-                        </svg>
-                        <span class="slds-assistive-text">Close</span>
-                    </button>
-                    <div class="slds-popover__body" id="dialog-body-id-6">
-                        <div :style="{visibility:!userItems.length?'visible':'hidden'}">
-                            <spinner class="slds-spinner_x-small" style="top:3em"></spinner>
-                        </div>
-                        <div :class="[userItems.length?'':'hidden']">
-                            <v-autocomplete v-model="popoverUserId" :auto-select-first="true" :items="userItems" solo dense
-                                            :clearable="true" placeholder="&lt;select salesforce user&gt;"></v-autocomplete>
-                            <div class="slds-button-group" role="group">
-                                <button class="slds-button slds-button_neutral"
-                                        @click="dispatch('switchUser',{instanceUrl:currentInstanceUrl,userId:popoverUserId})"
-                                        :disabled="!popoverUserId">
-                                    Switch User
-                                </button>
-                                <button class="slds-button slds-button_neutral"
-                                        @click="dispatch('loginAsUser',{instanceUrl:currentInstanceUrl,userId:popoverUserId})"
-                                        :disabled="!popoverUserId">
-                                    Login As
-                                </button>
-                                <a class="slds-button slds-button_neutral" href="javascript:void(0)" @click="dispatch('viewPage',currentInstanceUrl+'/'+popoverUserId+'?noredirect=1')"
-                                    :disabled="!popoverUserId">
-                                    View
-                                </a>
-                            </div>
-                            <div>
-                                {{userRoleName}} <span v-if="userProfileName">({{userProfileName}})</span> &nbsp;
-                            </div>
-                            <div v-if="userPicture">
-                                <img :src="userPicture" />
-                            </div>
-                        </div>
-                    </div>
-                </section>
-                <button class="slds-button slds-global-actions__avatar slds-global-actions__item-action" @click="dispatch('showUserPopover',true)">
-                    <span class="slds-avatar slds-avatar_circle slds-avatar_medium">
-                        <img :alt="userName" :src="userThumbnail|empty('/assets/images/avatar2.jpg')" :title="userName" />
-                    </span>
-                </button>
-            </div>
         </div>
     </div>
 </header>

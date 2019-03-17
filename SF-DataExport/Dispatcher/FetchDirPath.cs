@@ -8,45 +8,38 @@ namespace SF_DataExport.Dispatcher
 {
     public class FetchDirPath
     {
-        public void Dispatch(JToken payload, AppStateManager appState)
+        public JToken Dispatch(JToken payload, AppStateManager appState)
         {
             var search = TrimDir((string)payload?["search"]);
-            var field = ((string)payload?["field"]) ?? "";
 
-            if (search != "" && field != "")
+            if (search != "")
             {
                 try
                 {
                     var searchDir = new DirectoryInfo(search);
                     if (searchDir.Exists)
                     {
-                        appState.Commit(new JObject
-                        {
-                            [field] = new JArray(new[] { TrimDir(searchDir.FullName), TrimDir(searchDir.Parent.FullName) }
-                            .Concat(searchDir.Parent.GetDirectories().Where(d => MatchDir(d, searchDir.Name)).Select(d => TrimDir(d.FullName)))
+                        return new JArray(new[] { TrimDir(searchDir.FullName), TrimDir(searchDir.Parent?.FullName) }
+                            .Concat(searchDir.Parent?.GetDirectories().Where(d => MatchDir(d, searchDir.Name)).Select(d => TrimDir(d.FullName)) ?? new string[0])
                             .Concat(searchDir.GetDirectories().Select(d => TrimDir(d.FullName)))
-                            .Where(s => s != "").Distinct())
-                        });
-                        return;
+                                .Concat(Directory.GetLogicalDrives().Select(d => TrimDir(d)))
+                            .Where(s => s != "").Distinct());
                     }
                     else
                     {
                         var fi = new FileInfo(search);
-                        if (fi.Directory.Exists)
+                        if (fi.Directory?.Exists == true)
                         {
-                            appState.Commit(new JObject
-                            {
-                                [field] = new JArray(new[] { TrimDir(fi.Directory.FullName) }
+                            return new JArray(new[] { TrimDir(fi.Directory.FullName) }
                                 .Concat(fi.Directory.GetDirectories().Where(d => MatchDir(d, fi.Name)).Select(d => TrimDir(d.FullName)))
-                                .Where(s => s != "").Distinct())
-                            });
-                            return;
+                                .Concat(Directory.GetLogicalDrives().Select(d => TrimDir(d)))
+                                .Where(s => s != "").Distinct());
                         }
                     }
                 }
                 catch { }
             }
-            appState.Commit(new JObject { [field] = new JArray() });
+            return new JArray(Directory.GetLogicalDrives().Select(d => TrimDir(d)));
 
             string TrimDir(string dir)
             {

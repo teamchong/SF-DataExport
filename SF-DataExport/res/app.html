@@ -1,6 +1,13 @@
-﻿<script>
-    //http://trendct.org/2016/01/22/how-to-choose-a-label-color-to-contrast-with-background/
-
+﻿<div id="app"><page-app></page-app></div>
+<script src='/vue.js'></script>
+<script src='/vuex.js'></script>
+<script src='/vuetify.js'></script>
+<script src='/lodash.js'></script>
+<script src="/moment.js"></script>
+<script src='/rxjs.js'></script>
+<script src="/chart.js"></script>
+<script src='/orgchart.js'></script>
+<script>
     const { defer, interval, of, Subject, timer } = rxjs;
     const { bufferTime, concat, concatMap, delayWhen, filter, ignoreElements, retryWhen, switchMap, takeWhile, tap } = rxjs.operators;
 
@@ -64,31 +71,39 @@
     });
     Vue.mixin({
         methods: {
+            currentOrgName() {
+                const { currentInstanceUrl } = this.$store.state;
+                return currentInstanceUrl ? currentInstanceUrl
+                    .replace(/^https:\/\/|\.my\.salesforce\.com$|\.salesforce\.com$/ig, '')
+                    .replace(' ', '-')
+                    .toLowerCase() : '';
+            },
             dispatch(type, payload) { return this.$store.state.dispatch$.next({ type, payload }); },
             percent(a, b) {
                 if (!b) return 0;
                 return 100.0 * a / b;
             },
             orgHasOfflineAccess(org) { return this.$store.state.orgOfflineAccess.indexOf(org) >= 0; },
-            orgIsSandbox(org) { return this.$store.state.orgSandboxes.indexOf(org) >= 0; },
+            orgIsSandbox(org) { return this.$store.state.orgSandboxes.indexOf(org) >= 0; }
         },
     });
 </script>
 <script src="/components/org-chart.js"></script>
 <script src="/components/spinner.js"></script>
 <script src="/components/button-iconleft.js"></script>
+<script src="/components/cmdcopy-element.js"></script>
+<script src="/components/dir-element.js"></script>
+<script src="/components/file-element.js"></script>
 <script src="/components/v-modal.js"></script>
+<script src="/components/limits-modal.js"></script>
+<script src="/components/photos-modal.js"></script>
 <script src="/components/overview-tab.js"></script>
-<script src="/components/photos-tab.js"></script>
-<script src="/components/limits-tab.js"></script>
 <script src="/components/data-tab.js"></script>
 <script src="/components/download-dataexport-tab.js"></script>
 <script src="/components/setup-tab.js"></script>
 <script src="/components/page-header.js"></script>
 <script src="/components/organization-modal.js"></script>
 <script src="/components/page-app.js"></script>
-
-<div id="app"><page-app></page-app></div>
 <script>
     const app = new Vue({ el: '#app', store });
     store.state.dispatch$.next({ type: 'isLoading', payload: false });

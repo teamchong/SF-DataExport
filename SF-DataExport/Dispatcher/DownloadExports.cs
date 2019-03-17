@@ -218,11 +218,8 @@ namespace SF_DataExport.Dispatcher
                 {
                     appState.Commit(new JObject { ["alertMessage"] = ex.Message });
                 }
-                finally
-                {
-                    appState.Commit(new JObject { ["isLoading"] = false });
-                }
             })
+            .Finally(() => appState.Commit(new JObject { ["isLoading"] = false }))
             .ScheduleTask();
         }
     }

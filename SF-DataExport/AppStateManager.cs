@@ -1,4 +1,5 @@
-﻿using DotNetForce;
+﻿
+using DotNetForce;
 using Newtonsoft.Json.Linq;
 using PuppeteerSharp;
 using SF_DataExport.Dispatcher;
@@ -40,37 +41,55 @@ namespace SF_DataExport
             {
                 ["alertMessage"] = "",
                 ["chromePath"] = AppSettings.GetString(AppConstants.PATH_CHROME),
-                ["chromePathItems"] = new JArray(AppSettings.GetString(AppConstants.PATH_CHROME)),
-                ["cmdExport"] = AppDomain.CurrentDomain.FriendlyName + " download@",
+                ["cmd"] = AppDomain.CurrentDomain.FriendlyName,
                 ["currentAccessToken"] = "",
                 ["currentId"] = "",
                 ["currentInstanceUrl"] = "",
                 ["exportCount"] = null,
                 ["exportEmails"] = "",
                 ["exportPath"] = Resource.DefaultDirectory.TrimEnd(Path.DirectorySeparatorChar),
-                ["exportPathItems"] = new JArray(Resource.DefaultDirectory.TrimEnd(Path.DirectorySeparatorChar)),
                 ["exportResult"] = "",
                 ["exportResultFiles"] = new JArray(),
                 ["isLoading"] = false,
                 ["globalSearch"] = null,
                 ["objects"] = new JArray(),
-                ["orgLimits"] = new JObject(),
+                ["orgLimits"] = new JArray(),
+                ["orgLimitsLog"] = new JArray(),
                 ["orgChartSearch"] = "",
                 ["orgSettingsPath"] = OrgSettings.GetDirectoryPath(),
-                ["orgSettingsPathItems"] = new JArray(OrgSettings.GetDirectoryPath()),
                 ["popoverUserId"] = "",
+                ["showLimitsModal"] = false,
                 ["showOrgModal"] = true,
+                ["showPhotosModal"] = false,
                 ["showUserPopover"] = false,
                 ["tab"] = "overview", //"downloaddataexport", //"setup"
                 ["toolingObjects"] = new JArray(),
                 ["userId"] = "",
                 ["userIdAs"] = "",
-                ["userLicenses"] = new JArray(),
                 ["userProfiles"] = new JArray(),
                 ["userRoles"] = new JObject(),
                 ["users"] = new JArray(),
             };
             State.Merge(GetOrgSettings(), MergeSettings);
+        }
+
+        public async Task<DNFClient> OfflineAccessAsync(string instanceUrl)
+        {
+            if (string.IsNullOrEmpty(instanceUrl)) throw new ArgumentException("instanceUrl is empty");
+            var accessToken = (string)OrgSettings.Get(o => o[instanceUrl]?[OAuth.ACCESS_TOKEN]);
+            var refreshToken = (string)OrgSettings.Get(o => o[instanceUrl]?[OAuth.REFRESH_TOKEN]);
+            var loginUrl = Resource.GetLoginUrl(OrgSettings.Get(o => o[instanceUrl]?[OAuth.ID]));
+            var client = new DNFClient(instanceUrl, accessToken, refreshToken);
+            await client.TokenRefreshAsync(new Uri(loginUrl), Resource.GetClientIdByLoginUrl(loginUrl)).GoOn();
+            await SetOrganizationAsync(
+                client.AccessToken,
+                client.InstanceUrl,
+                client.Id,
+                client.RefreshToken
+            ).GoOn();
+            Commit(GetOrgSettings());
+            SetCurrentInstanceUrl(client);
+            return client;
         }
 
         public async Task<bool> ProcessCommandAsync(JObject command)
@@ -80,6 +99,7 @@ namespace SF_DataExport
             switch ((string)command?["command"])
             {
                 case AppConstants.COMMAND_DOWNLOAD:
+                    await OfflineAccessAsync((string)command["instanceUrl"] ?? "");
                     await Observable.Merge(
                         Observable.Defer(() =>
                         {
@@ -111,11 +131,19 @@ namespace SF_DataExport
                     .Count()
                     .SubscribeOn(TaskPoolScheduler.Default);
                     return true;
+                case AppConstants.COMMAND_LOGIN_AS:
+                    await OfflineAccessAsync((string)command["instanceUrl"] ?? "");
+                    new LoginAsUser().Dispatch(command, this, Resource, AppSettings, OrgSettings);
+                    return true;
+                case AppConstants.COMMAND_LOG_LIMITS:
+                    await OfflineAccessAsync((string)command["instanceUrl"] ?? "");
+                    await new GetLimits().DispatchAsync(command, this, Resource, OrgSettings);
+                    return true;
             }
             return false;
         }
 
-        public void DispatchActions(Page appPage, JArray actions)
+        public async Task<JToken> DispatchActionsAsync(Page appPage, JArray actions)
         {
             for (var i = 0; i < actions.Count; i++)
             {
@@ -134,11 +162,9 @@ namespace SF_DataExport
                             new DownloadExports().Dispatch(payload, this, Resource, OrgSettings);
                             break;
                         case "fetchDirPath":
-                            new FetchDirPath().Dispatch(payload, this);
-                            break;
-                        case "fetchPath":
-                            new FetchPath().Dispatch(payload, this);
-                            break;
+                            return new FetchDirPath().Dispatch(payload, this);
+                        case "fetchFilePath":
+                            return new FetchFilePath().Dispatch(payload, this);
                         case "loginAsUser":
                             new LoginAsUser().Dispatch(payload, this, Resource, AppSettings, OrgSettings);
                             break;
@@ -154,15 +180,18 @@ namespace SF_DataExport
                         case "setOrgSettingsPath":
                             new SetOrgSettingsPath().Dispatch(payload, this);
                             break;
+                        case "showLimitsModal":
+                            Commit(new JObject { [type] = payload });
+                            if ((bool)payload == true)
+                            {
+                                await new GetLimits().DispatchAsync(new JObject
+                                {
+                                    ["instanceUrl"] = State["currentInstanceUrl"]
+                                }, this, Resource, OrgSettings).GoOn();
+                            }
+                            break;
                         case "switchUser":
                             new SwitchUser().Dispatch(payload, this, Resource, AppSettings, OrgSettings);
-                            break;
-                        case "tab":
-                            Commit(new JObject { [type] = payload });
-                            if ((string)payload == "limits")
-                            {
-                                new GetLimits().Dispatch(this, OrgSettings);
-                            }
                             break;
                         case "viewDownloadExports":
                             new ViewDownloadExports().Dispatch(payload, this, Resource, AppSettings, OrgSettings);
@@ -179,6 +208,7 @@ namespace SF_DataExport
                     }
                 }
             }
+            return null;
         }
 
         public async Task SubscribeAsync(Page appPage)
@@ -186,21 +216,25 @@ namespace SF_DataExport
             await appPage.SetRequestInterceptionAsync(true).GoOn();
             await appPage.SetCacheEnabledAsync(false).GoOn();
             await appPage.SetBypassCSPAsync(true).GoOn();
-            await appPage.ExposeFunctionAsync("subscribeDispatch", (JArray actions) =>
+            await appPage.ExposeFunctionAsync("subscribeDispatch", async (JArray actions) =>
                 {
                     try
                     {
                         if (Resource.IsRedirectPage(appPage.Url))
                         {
-                            DispatchActions(appPage, actions);
+                            return await DispatchActionsAsync(appPage, actions).GoOn();
                         }
                     }
+#if DEBUG
                     catch (Exception ex)
                     {
-#if DEBUG
                         Console.WriteLine(ex.ToString());
-#endif
                     }
+#else
+                    catch
+                    {
+                    }
+#endif
                     return (JToken)null;
                 }).GoOn();
             CommitSubject.SelectMany((JObject newState) => Observable.Defer(() =>
@@ -323,13 +357,15 @@ namespace SF_DataExport
             {
                 ["currentInstanceUrl"] = client.InstanceUrl,
                 ["popoverUserId"] = "",
+                ["showLimitsModal"] = false,
                 ["showOrgModal"] = false,
+                ["showPhotosModal"] = false,
                 ["objects"] = new JArray(),
-                ["orgLimits"] = new JObject(),
+                ["orgLimits"] = new JArray(),
+                ["orgLimitsLog"] = new JArray(),
                 ["toolingObjects"] = new JArray(),
                 ["userId"] = userId,
                 ["userIdAs"] = userId,
-                ["userLicenses"] = new JArray(),
                 ["userProfiles"] = new JArray(),
                 ["userRoles"] = new JObject(),
                 ["users"] = new JArray(),
@@ -422,16 +458,18 @@ namespace SF_DataExport
             {
                 newDirectoryPath = Resource.DefaultDirectory;
             }
+
             var newFilePath = Path.Combine(newDirectoryPath, AppConstants.JSON_ORG_SETTINGS);
 
             var oldDirectoryPath = OrgSettings.GetDirectoryPath();
-            var oldFilePath = Path.Combine(newDirectoryPath, AppConstants.JSON_ORG_SETTINGS);
+            var oldFilePath = Path.Combine(oldDirectoryPath, AppConstants.JSON_ORG_SETTINGS);
 
             if (newFilePath != oldFilePath)
             {
                 try
                 {
                     var orgData = OrgSettings.Get(d => d);
+                    Directory.CreateDirectory(newDirectoryPath);
                     await File.WriteAllTextAsync(newFilePath, orgData.ToString()).GoOn();
                     try { File.Delete(oldFilePath); } catch { }
                     await AppSettings.SaveAysnc(o => o[AppConstants.PATH_ORG_SETTINGS] = newDirectoryPath).GoOn();

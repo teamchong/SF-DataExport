@@ -29,7 +29,11 @@
             return null;
         },
         reload() {
-            this.loadTime = new Date().getTime();
+            if (this.orgChartSearch) {
+                this.dispatch('orgChartSearch', '');
+            } else {
+                this.loadTime = new Date().getTime();
+            }
         }
     },
     computed: {
@@ -54,5 +58,11 @@
                 this.dispatch('orgChartSearch', value);
             }
         },
-    },
+        showLimitsModal() {
+            return this.$store.state.showLimitsModal;
+        },
+        showPhotosModal() {
+            return this.$store.state.showPhotosModal;
+        }
+    }
 });

@@ -58,13 +58,20 @@ namespace SF_DataExport.Dispatcher
                                     client.Id,
                                     client.RefreshToken).GoOn();
                                 appState.SetCurrentInstanceUrl(client);
-                                appState.Commit(new JObject { ["isLoading"] = false });
                                 return;
+                            }
+                            catch (IOException ioEx)
+                            {
+                                appState.Commit(new JObject
+                                {
+                                    ["alertMessage"] = ioEx.Message
+                                });
+                                throw;
                             }
                             catch (Exception ex)
                             {
                                 Console.WriteLine(ex.ToString());
-                                //appState.Commit(new JObject { ["alertMessage"] = ex.Message, ["isLoading"] = false });
+                                //appState.Commit(new JObject { ["alertMessage"] = ex.Message });
                                 //return;
                             }
                         }
@@ -76,10 +83,11 @@ namespace SF_DataExport.Dispatcher
                         "&redirect_uri=" + HttpUtility.UrlEncode(resource.GetRedirectUrlByLoginUrl(loginUrl)) +
                         "&state=" + HttpUtility.UrlEncode(loginUrl) +
                         "&display=popup";
-                    appState.Commit(new JObject { [AppConstants.ACTION_REDIRECT] = targetUrl, ["isLoading"] = false });
+                    appState.Commit(new JObject { [AppConstants.ACTION_REDIRECT] = targetUrl });
                     return;
                 }
             })
+            .Finally(() => appState.Commit(new JObject { ["isLoading"] = false }))
             .ScheduleTask();
         }
     }

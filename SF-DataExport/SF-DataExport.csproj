@@ -12,7 +12,7 @@
     <ApplicationIcon>favicon.ico</ApplicationIcon>
     <StartupObject />
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <Version>1.0.2.3001</Version>
+    <Version>1.0.3.3000</Version>
     <RepositoryUrl>https://github.com/ste80/sf-dataexport</RepositoryUrl>
     <RepositoryType>GIT</RepositoryType>
     <PackageProjectUrl>https://github.com/ste80/sf-dataexport</PackageProjectUrl>
@@ -25,6 +25,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="CsvHelper" Version="12.1.2" />
     <PackageReference Include="DotNetForce" Version="5.1.0" />
     <PackageReference Include="HtmlAgilityPack" Version="1.9.2" />
     <PackageReference Include="Microsoft.Extensions.CommandLineUtils" Version="1.1.1" />
@@ -34,12 +35,6 @@
 
   <ItemGroup>
     <EmbeddedResource Include="res\**\*.*" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <None Remove="res\components\data-tab.js" />
-    <None Remove="res\components\data-tab.tpl" />
-    <None Remove="res\lodash.js" />
   </ItemGroup>
 
 </Project>

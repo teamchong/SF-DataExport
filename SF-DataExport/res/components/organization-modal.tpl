@@ -1,6 +1,6 @@
 ﻿<v-modal @close="dispatch('showOrgModal',false)">
     <template #header>
-        <h2 id="modal-heading-01" class="slds-text-heading_medium slds-hyphenate">Manage Organizations</h2>
+        <h2 class="slds-text-heading_medium slds-hyphenate">Manage Organizations</h2>
     </template>
     <div v-if="orgSettings.length">
         <h3>Saved Organizations</h3>
@@ -58,16 +58,8 @@
         </li>-->
     </ul>
     <hr />
-    <div class="slds-form-element">
-        <div class="slds-clearfix">
-            <div class="slds-float_right">
-                <button class="slds-button slds-button_success" @click="dispatch('setOrgSettingsPath',orgSettingsPath)">Save path</button>
-            </div>
-            <label class="slds-form-element__label" for="text-input-id-1">Org settings file path</label>
-        </div>
-        <div class="slds-form-element__control" style="margin-top:0.1em;">
-            <v-combobox v-model="orgSettingsPath" :items="orgSettingsPathItems" solo dense hide-no-data no-filter
-                            id="text-input-id-1" :search-input.sync="fetchOrgSettingsPath"></v-combobox>
-        </div>
+	<dir-element v-model="orgSettingsPath" label=" settings file path"></dir-element>
+    <div class="slds-float_right">
+        <button class="slds-button slds-button_success" @click="dispatch('setOrgSettingsPath',orgSettingsPath)">Save path</button>
     </div>
 </v-modal>

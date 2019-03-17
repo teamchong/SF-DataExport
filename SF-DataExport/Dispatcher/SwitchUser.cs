@@ -25,9 +25,9 @@ namespace SF_DataExport.Dispatcher
     {
         public void Dispatch(JToken payload, AppStateManager appState, ResourceManager resource, JsonConfig appSettings, JsonConfig orgSettings)
         {
+            appState.Commit(new JObject { ["isLoading"] = true });
             Observable.FromAsync(async () =>
             {
-                appState.Commit(new JObject { ["isLoading"] = true });
                 var instanceUrl = (string)payload?["instanceUrl"] ?? "";
                 var userId = (string)payload?["userId"] ?? "";
                 var accessToken = (string)orgSettings.Get(o => o[instanceUrl]?[OAuth.ACCESS_TOKEN]) ?? "";
@@ -40,7 +40,7 @@ namespace SF_DataExport.Dispatcher
                     var cookies = cookieContainer.GetCookies(new Uri(instanceUrl));
                     var newAccessToken = cookies["sid"]?.Value ?? "";
                     if (newAccessToken != "")
-                    
+
                     {
                         var newId = id.Remove(id.LastIndexOf('/') + 1) + userId;
                         appState.Commit(new JObject

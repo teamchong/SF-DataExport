@@ -1,5 +1,7 @@
-﻿using DotNetForce;
-using PuppeteerSharp;
+﻿using CsvHelper;
+using CsvHelper.Configuration;
+using DotNetForce;
+using Newtonsoft.Json.Linq;
 using System;
 using System.Diagnostics;
 using System.IO;
@@ -39,12 +41,6 @@ namespace SF_DataExport
 <link rel='stylesheet' type='text/css' href='/orgchart.css'/>
 <link rel='stylesheet' type='text/css' href='/font-awesome.css'/>
 <link rel='stylesheet' type='text/css' href='/app.css'/>
-<script src='/vue.js'></script>
-<script src='/vuex.js'></script>
-<script src='/vuetify.js'></script>
-<script src='/lodash.js'></script>
-<script src='/rxjs.js'></script>
-<script src='/orgchart.js'></script>
 </head>
 <body>
 <script>const appState=");
@@ -55,6 +51,44 @@ namespace SF_DataExport
             Throttler = new SemaphoreSlim(1, 1);
             LatestSession = new BehaviorSubject<(DateTime cacheTime, CookieContainer cookies, string instanceUrl, string accessToken)>(
                 (DateTime.Now, new CookieContainer(), "", ""));
+        }
+
+        public string OrgName(string instanceUrl)
+        {
+            var replaceRex = new Regex(@"^https://|\.my\.salesforce\.com$|\.salesforce\.com$", RegexOptions.IgnoreCase);
+            return replaceRex.Replace(instanceUrl ?? "", "").Replace(" ", "-").ToLower();
+        }
+
+        public async Task<JArray> GetOrgLimitsLogAsync(string orgName)
+        {
+            var file = new FileInfo(Path.Combine(DefaultDirectory, orgName + ".limits.csv"));
+            var result = new JArray();
+            if (file.Exists)
+            {
+                var csvConfig = new Configuration { Delimiter = "\t", Encoding = Encoding.Unicode };
+                using (var fileStream = file.Open(FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                {
+                    using (var streamReader = new StreamReader(fileStream, true))
+                    {
+                        using (var reader = new CsvReader(streamReader, csvConfig))
+                        {
+                            if (await reader.ReadAsync().GoOn())
+                            {
+                                while (await reader.ReadAsync().GoOn())
+                                {
+                                    result.Add(new JArray(
+                                        reader.GetField<string>(0),
+                                        reader.GetField<double>(1),
+                                        reader.GetField<double>(2),
+                                        reader.GetField<string>(3)
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            return result;
         }
 
         public async Task<CookieContainer> GetCookieAsync(string newInstanceUrl, string newAccessToken)
@@ -181,7 +215,12 @@ namespace SF_DataExport
 
         public void OpenIncognitoBrowser(string url, string chromePath)
         {
-            var process = new ProcessStartInfo(chromePath, "-incognito " + url);
+            var process = new ProcessStartInfo(chromePath,
+                string.Join(" ", new[] {
+                $"--bwsi", //Indicates that the browser is in "browse without sign-in" (Guest session) mode. Should completely disable extensions, sync and bookmarks. 
+                $"--incognito "
+                //$"--ignore-certificate-errors"
+            }) + url);
             Process.Start(process);
         }
 

@@ -9,6 +9,8 @@
         public const string PATH_ORG_SETTINGS = "orgSettingsPath";
 
         public const string COMMAND_DOWNLOAD = "download";
+        public const string COMMAND_LOG_LIMITS = "loglimits";
+        public const string COMMAND_LOGIN_AS = "loginas";
         
         public const string ACTION_REDIRECT = "pageRedirect";
     }

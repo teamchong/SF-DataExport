@@ -32,13 +32,14 @@ namespace SF_DataExport.Dispatcher
                 var errorMessage = await appState.SaveOrgSettingsPathAsync(orgSettingsPath).GoOn();
                 if (errorMessage == null)
                 {
-                    appState.Commit(new JObject { ["alertMessage"] = "Save successfully.", ["isLoading"] = false });
+                    appState.Commit(new JObject { ["alertMessage"] = "Save successfully." });
                 }
                 else
                 {
-                    appState.Commit(new JObject { ["alertMessage"] = "No change.", ["isLoading"] = false });
+                    appState.Commit(new JObject { ["alertMessage"] = "No change." });
                 }
             })
+            .Finally(() => appState.Commit(new JObject { ["isLoading"] = false }))
             .ScheduleTask();
         }
     }

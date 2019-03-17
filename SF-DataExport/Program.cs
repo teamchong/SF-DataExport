@@ -22,12 +22,10 @@ namespace SF_DataExport
                 var orgSettings = new JsonConfig(Path.Combine(GetOrgPath(appSettings, resource).orgPath, AppConstants.JSON_ORG_SETTINGS));
 
                 var cliApp = new CommandLineApplication(false);
-                var replaceRex = new Regex(@"^https://|\.my\.salesforce\.com$|\.salesforce\.com$", RegexOptions.IgnoreCase);
 
                 foreach (var org in orgSettings.Get(d => d.Properties()))
                 {
-                    var orgName = replaceRex.Replace(org.Name, "")
-                        .Replace(" ", "-").ToLower();
+                    var orgName = resource.OrgName(org.Name);
                     var hasOfflineAccess = !string.IsNullOrEmpty((string)org.Value[OAuth.REFRESH_TOKEN]);
 
                     cliApp.Command(orgName, cliCfg =>
@@ -59,6 +57,38 @@ namespace SF_DataExport
                                     ["instanceUrl"] = org.Name,
                                     ["exportEmails"] = emailOpt.Value(),
                                     ["exportPath"] = exportPathOpt.Value(),
+                                }).GoOn();
+                            });
+                        });
+                        cliApp.Command("loginas@" + orgName, cliCfg =>
+                        {
+                            var pathOpt = cliCfg.Option("-chromepath", "Chrome executable path", CommandOptionType.SingleValue);
+                            var channelOpt = cliCfg.Option("-chromechannel", "Preferred Chrome Channel", CommandOptionType.SingleValue);
+                            var userOpt = cliCfg.Option("-user", "User Id", CommandOptionType.SingleValue);
+                            var pageOpt = cliCfg.Option("-page", "Page to visit", CommandOptionType.SingleValue);
+                            cliCfg.OnExecute(async () =>
+                            {
+                                await InitializeAsync(appSettings, resource, pathOpt, channelOpt).GoOn();
+                                return await StartAsync(appSettings, orgSettings, resource, "", new JObject
+                                {
+                                    ["command"] = AppConstants.COMMAND_LOGIN_AS,
+                                    ["instanceUrl"] = org.Name,
+                                    ["userId"] = userOpt.Value(),
+                                    ["page"] = pageOpt.Value(),
+                                }).GoOn();
+                            });
+                        });
+                        cliApp.Command("loglimits@" + orgName, cliCfg =>
+                        {
+                            var pathOpt = cliCfg.Option("-chromepath", "Chrome executable path", CommandOptionType.SingleValue);
+                            var channelOpt = cliCfg.Option("-chromechannel", "Preferred Chrome Channel", CommandOptionType.SingleValue);
+                            cliCfg.OnExecute(async () =>
+                            {
+                                await InitializeAsync(appSettings, resource, pathOpt, channelOpt).GoOn();
+                                return await StartAsync(appSettings, orgSettings, resource, "", new JObject
+                                {
+                                    ["command"] = AppConstants.COMMAND_LOG_LIMITS,
+                                    ["instanceUrl"] = org.Name,
                                 }).GoOn();
                             });
                         });

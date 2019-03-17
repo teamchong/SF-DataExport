@@ -39,6 +39,23 @@
             }
             return results;
         },
+        userItems() {
+            return this.$store.state.users.map(o => ({ text: o.Name + ' ' + o.Email, value: o.Id }));
+        },
+        userAs() {
+            const { userIdAs, users } = this.$store.state;
+            for (let len = users.length, i = 0; i < len; i++) {
+                const user = users[i];
+                if (user.Id === userIdAs) return user;
+            }
+            return {};
+        },
+        userName() {
+            return this.userAs.Username || '';
+        },
+        userThumbnail() {
+            return this.userAs.SmallPhotoUrl || '';
+        },
         objectName() { return (this.globalSearch || {}).name || ''; },
         objectLabel() { return (this.globalSearch || {}).label || ''; },
         objectListPage() {
@@ -63,38 +80,6 @@
             set(value) { this.dispatch('popoverUserId', value); }
         },
         showOrgModal() { return this.$store.state.showOrgModal; },
-        showUserPopover() { return this.$store.state.showUserPopover; },
-        userAs() {
-            const { userIdAs, users } = this.$store.state;
-            for (let len = users.length, i = 0; i < len; i++) {
-                const user = users[i];
-                if (user.Id === userIdAs) return user;
-            }
-            return {};
-        },
-        userDisplayName() {
-            return this.userAs.Name || '';
-        },
-        userEmail() {
-            return this.userAs.Email || '';
-        },
-        userItems() {
-            return this.$store.state.users.map(o => ({ text: o.Name + ' ' + o.Email, value: o.Id }));
-        },
-        userName() {
-            return this.userAs.Username || '';
-        },
-        userPicture() {
-            return this.userAs.FullPhotoUrl || '';
-        },
-        userProfileName() {
-            return (this.userAs.Profile || {}).Name || '';
-        },
-        userRoleName() {
-            return (this.userAs.UserRole || {}).Name || '';
-        },
-        userThumbnail() {
-            return this.userAs.SmallPhotoUrl || '';
-        }
+        userIdAs() { return this.$store.state.userIdAs; }
     }
 });

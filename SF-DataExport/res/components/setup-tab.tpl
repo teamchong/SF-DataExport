@@ -24,24 +24,8 @@
         </div>
     </div>
     <div style="padding:1em;">
-        <div class="slds-form-element">
-            <div class="slds-clearfix">
-                <label class="slds-form-element__label" for="text-input-id-1">Org settings file path</label>
-            </div>
-            <div class="slds-form-element__control" style="margin-top:0.1em;">
-                <v-combobox v-model="orgSettingsPath" :items="orgSettingsPathItems" solo dense hide-no-data no-filter
-                                id="text-input-id-1" :search-input.sync="fetchOrgSettingsPath"></v-combobox>
-            </div>
-        </div>
-        <div class="slds-form-element">
-            <div class="slds-clearfix">
-                <label class="slds-form-element__label" for="text-input-id-2">Chrome path</label>
-            </div>
-            <div class="slds-form-element__control" id="text-input-id-2" style="margin-top:0.1em;">
-                <v-combobox v-model="chromePath" :items="chromePathItems" solo dense hide-no-data no-filter
-                                id="text-input-id-2" :search-input.sync="fetchChromePath"></v-combobox>
-            </div>
-        </div>
+		<dir-element v-model="orgSettingsPath" label="Org settings file path"></dir-element>
+		<dir-element v-model="chromePath" label="Chrome path"></dir-element>
         <hr />
         <div class="slds-form-element">
             <button class="slds-button slds-button_success" @click="dispatch('saveConfig',{orgSettingsPath,chromePath})">Save path</button>

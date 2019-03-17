@@ -1,22 +1,9 @@
-﻿using DotNetForce;
-using HtmlAgilityPack;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
-using PuppeteerSharp;
+﻿using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
-using System.IO;
-using System.IO.Compression;
 using System.Linq;
-using System.Net;
-using System.Net.Http;
 using System.Reactive.Concurrency;
 using System.Reactive.Linq;
-using System.Reactive.Subjects;
-using System.Text.RegularExpressions;
-using System.Threading;
-using System.Threading.Tasks;
-using System.Web;
 using Unit = System.Reactive.Unit;
 
 namespace SF_DataExport.Dispatcher
@@ -51,14 +38,15 @@ namespace SF_DataExport.Dispatcher
                 var message = string.Join(Environment.NewLine, errorMessages);
                 if (errorMessages.Count <= 0)
                 {
-                    appState.Commit(new JObject { ["alertMessage"] = "Save successfully.", ["isLoading"] = false });
+                    appState.Commit(new JObject { ["alertMessage"] = "Save successfully." });
                 }
                 else
                 {
-                    appState.Commit(new JObject { ["alertMessage"] = message, ["isLoading"] = false });
+                    appState.Commit(new JObject { ["alertMessage"] = message });
                 }
                 return Observable.Empty<Unit>();
             }))
+            .Finally(() => appState.Commit(new JObject { ["isLoading"] = false }))
             .ScheduleTask();
         }
     }

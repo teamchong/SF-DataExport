@@ -1,26 +1,12 @@
 ﻿Vue.component('download-dataexport-tab', {
     template,
-    data() { return { fetchExportPath: '' }; },
-    watch: {
-        fetchExportPath(search) {
-            if (search && search !== this.search) {
-                this.$store.state.dispatch$.next({
-                    type: 'fetchDirPath', payload: {
-                        search, value: this.$store.state.exportPath, field: 'exportPathItems'
-                    }
-                });
-            }
-        },
-    },
     computed: {
         cmdExport() {
-            const orgName = this.$store.state.currentInstanceUrl ? this.$store.state.currentInstanceUrl
-                .replace(/^https:\/\/|\.my\.salesforce\.com$|\.salesforce\.com$/ig, '')
-                .replace(' ', '-')
-                .toLowerCase() : '';
-            const exportEmails = this.exportEmails ? " -email \"" + this.exportEmails + "\"" : "";
-            const exportPath = this.exportPath ? " -path \"" + this.exportPath + "\"" : "";
-            return this.$store.state.cmdExport + orgName + exportEmails + exportPath;
+            const { cmd } = this.$store.state;
+            const { exportEmails, exportPath } = this;
+            const exportEmailsParam = exportEmails ? " -email \"" + exportEmails + "\"" : "";
+            const exportPathParam = exportPath ? " -path \"" + exportPath + "\"" : "";
+            return cmd + ' download@' + this.currentOrgName() + exportEmailsParam + exportPathParam;
         },
         currentInstanceUrl() { return this.$store.state.currentInstanceUrl; },
         exportEmails: {
@@ -31,7 +17,6 @@
             get() { return this.$store.state.exportPath; },
             set(value) { this.dispatch('exportPath', value); },
         },
-        exportPathItems() { return this.$store.state.exportPathItems; },
         exportPercent() {
             const { exportCount, exportResultFiles } = this.$store.state;
             if (!exportCount) return 0;
@@ -82,6 +67,6 @@
         userIdAs() { return this.$store.state.userIdAs; },
         userItems() {
             return this.$store.state.users.map(o => ({ text: o.Name + ' ' + o.Email, value: o.Id }));
-        },
-    },
+        }
+    }
 });
