@@ -116,15 +116,11 @@ namespace SF_DataExport
                     using (var httpClient = new HttpClient(handler))
                     {
                         var htmlContent = await GetLoginWaitForRedirect(httpClient, newInstanceUrl, urlWithAccessCode, targetUrl).GoOn();
+                        if (!htmlContent.Contains(newInstanceUrl)) throw new UnauthorizedAccessException();
                         LatestSession.OnNext((DateTime.Now, cookieContainer, newInstanceUrl, newAccessToken));
                         return cookieContainer;
                     }
                 }
-            }
-            catch
-            {
-                LatestSession.OnNext((DateTime.Now, cookieContainer, newInstanceUrl, newAccessToken));
-                throw;
             }
             finally
             {

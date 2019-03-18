@@ -25,7 +25,7 @@ namespace SF_DataExport
         JsonConfig OrgSettings { get; set; }
         AppStateManager AppState { get; set; }
         Page AppPage { get; set; }
-        bool IsRequestInterception { get; set; }
+        bool IsRequestInterception { get; set; } = true;
 
         public static async Task<AppDialog> CreateAsync(JsonConfig appSettings, JsonConfig orgSettings, ResourceManager resource,
             string instanceUrl, JObject command)
@@ -118,7 +118,7 @@ namespace SF_DataExport
             appPage.RequestFailed += Page_RequestFailed;
             //appPage.DOMContentLoaded += Page_DOMContentLoaded;
         }
-        
+
 
         IObservable<Unit> PageInterception(Page appPage, Func<Task> funcAsync, Request request)
         {
@@ -205,12 +205,8 @@ namespace SF_DataExport
             {
                 case OAuth.REDIRECT_URI:
                 case OAuth.REDIRECT_URI_SANDBOX:
-                    await Observable.FromAsync(async () =>
-                        {
-                            await appPage.SetRequestInterceptionAsync(true).GoOn();
-                            IsRequestInterception = true;
-                        })
-                        .SelectMany(_ => PageInterception(appPage, () => e.Request.RespondAsync(new ResponseData
+                    await Observable.Defer(() =>
+                        PageInterception(appPage, () => e.Request.RespondAsync(new ResponseData
                         {
                             Status = HttpStatusCode.Created,
                             ContentType = "text/html",
@@ -349,7 +345,6 @@ namespace SF_DataExport
                                 try
                                 {
                                     var loginUrl = Resource.GetLoginUrl(newOrg[OAuth.ID]);
-                                    Resource.ResetCookie();
                                     await client.TokenRefreshAsync(new Uri(loginUrl), Resource.GetClientIdByLoginUrl(loginUrl)).GoOn();
                                     await AppState.SetOrganizationAsync(
                                         client.AccessToken,
@@ -359,6 +354,7 @@ namespace SF_DataExport
                                     ).GoOn();
                                     AppState.Commit(AppState.GetOrgSettings());
                                     AppState.SetCurrentInstanceUrl(client);
+                                    Resource.ResetCookie();
                                     await Resource.GetCookieAsync(client.InstanceUrl, client.AccessToken).GoOn();
                                 }
                                 catch (Exception ex)
@@ -420,21 +416,24 @@ namespace SF_DataExport
                         return Resource.GetRedirectUrlByLoginUrl(url);
                     })
                     .SelectMany(redirectUrl =>
-                        Observable.Defer(() =>
+                        Observable.FromAsync(async () =>
                         {
+                            await appPage.SetRequestInterceptionAsync(true).GoOn();
+                            IsRequestInterception = true;
                             AppState.Commit(new JObject { [AppConstants.ACTION_REDIRECT] = redirectUrl });
-                            return Observable.Return(Unit.Default);
                         })
                     ).Catch((Exception ex) => Observable.Return(Unit.Default))
                     .SubscribeOn(TaskPoolScheduler.Default);
                     break;
                 case var url when url.StartsWith(OAuth.REDIRECT_URI + "?") || url.StartsWith(OAuth.REDIRECT_URI_SANDBOX + "?"):
+                    await appPage.SetRequestInterceptionAsync(true).GoOn();
+                    IsRequestInterception = true;
                     AppState.Commit(new JObject { [AppConstants.ACTION_REDIRECT] = OAuth.REDIRECT_URI });
                     break;
             }
         }
 
-        void Page_RequestFailed(object sender, RequestEventArgs e)
+        async void Page_RequestFailed(object sender, RequestEventArgs e)
         {
             var appPage = sender as Page;
             Console.WriteLine("RequestFailed: " + e.Request.Url);
@@ -442,6 +441,8 @@ namespace SF_DataExport
             {
                 case var url when url.StartsWith(OAuth.REDIRECT_URI + "#") || url.StartsWith(OAuth.REDIRECT_URI_SANDBOX + "#")
                     || url.StartsWith(OAuth.REDIRECT_URI + "?") || url.StartsWith(OAuth.REDIRECT_URI_SANDBOX + "?"):
+                    await appPage.SetRequestInterceptionAsync(true).GoOn();
+                    IsRequestInterception = true;
                     AppState.Commit(new JObject { [AppConstants.ACTION_REDIRECT] = OAuth.REDIRECT_URI });
                     break;
             }

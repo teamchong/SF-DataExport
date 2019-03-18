@@ -1,26 +1,25 @@
 ﻿Vue.component('org-chart', {
     template,
     props: ['data'],
-    data() {
-        return { width: 'auto', height: 'auto', overflow: 'visible' };
-    },
+    data() { return { chart: null }; },
     mounted() {
         this.$nextTick(function () {
-            this.createOrgChart(this.data);
+            this.createOrgChart();
         });
     },
     watch: {
-        data(value) {
-            this.createOrgChart(value);
+        data() {
+            this.createOrgChart();
         }
     },
     methods: {
-        createOrgChart(data) {
-            this.resize('auto', 'auto','visible');
+        createOrgChart() {
             this.$nextTick(function () {
+                const { $el, data } = this;
                 const { container } = this.$refs;
+                $el.style.height = 'auto';
                 this.removeAllChilds(container);
-                const chart = new OrgChart({
+                this.chart = new OrgChart({
                     chartContainer: '#' + container.id,
                     createNode: (node, data) => {
                         this.createOrgNode(node, data);
@@ -39,8 +38,7 @@
                     emptyNodes[i].parentNode.classList.add('empty');
                 }
                 this.$nextTick(function () {
-                    const { clientWidth, clientHeight } = chart.chart;
-                    this.resize(clientHeight + 'px', clientWidth + 'px', 'hidden');
+                    this.$el.style.height = this.chart.chart.clientWidth + 100 + 'px';
                 });
             });
         },
@@ -98,11 +96,6 @@
                     lastContent = node.lastChild;
                 }
             }
-        },
-        resize(width, height, overflow) {
-            this.width = width;
-            this.height = height;
-            this.overflow = overflow;
         }
     }
 });

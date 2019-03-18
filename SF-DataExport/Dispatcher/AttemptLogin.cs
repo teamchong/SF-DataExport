@@ -51,7 +51,6 @@ namespace SF_DataExport.Dispatcher
 
                             try
                             {
-                                resource.ResetCookie();
                                 await client.TokenRefreshAsync(new Uri(loginUrl), resource.GetClientIdByLoginUrl(loginUrl)).GoOn();
                                 await appState.SetOrganizationAsync(
                                     client.AccessToken,
@@ -59,6 +58,7 @@ namespace SF_DataExport.Dispatcher
                                     client.Id,
                                     client.RefreshToken).GoOn();
                                 appState.SetCurrentInstanceUrl(client);
+                                resource.ResetCookie();
                                 await resource.GetCookieAsync(client.InstanceUrl, client.AccessToken).GoOn();
                                 return;
                             }

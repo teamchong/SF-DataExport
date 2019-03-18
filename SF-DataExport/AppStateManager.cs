@@ -80,7 +80,6 @@ namespace SF_DataExport
             var refreshToken = (string)OrgSettings.Get(o => o[instanceUrl]?[OAuth.REFRESH_TOKEN]);
             var loginUrl = Resource.GetLoginUrl(OrgSettings.Get(o => o[instanceUrl]?[OAuth.ID]));
             var client = new DNFClient(instanceUrl, accessToken, refreshToken);
-            Resource.ResetCookie();
             await client.TokenRefreshAsync(new Uri(loginUrl), Resource.GetClientIdByLoginUrl(loginUrl)).GoOn();
             await SetOrganizationAsync(
                 client.AccessToken,
@@ -90,6 +89,7 @@ namespace SF_DataExport
             ).GoOn();
             Commit(GetOrgSettings());
             SetCurrentInstanceUrl(client);
+            Resource.ResetCookie();
             await Resource.GetCookieAsync(client.InstanceUrl, client.AccessToken).GoOn();
             return client;
         }
