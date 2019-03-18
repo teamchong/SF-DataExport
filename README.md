@@ -1,6 +1,6 @@
 # sf-dataexport
 
-.NET Core Global Tool for automatically download data export from Salesforce.
+.NET Core Global Tool for for administrative tasks of Salesforce.
 
  
 ## Installation
