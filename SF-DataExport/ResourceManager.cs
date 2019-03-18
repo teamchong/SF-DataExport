@@ -94,6 +94,7 @@ namespace SF_DataExport
         public async Task<CookieContainer> GetCookieAsync(string newInstanceUrl, string newAccessToken)
         {
             await Throttler.WaitAsync();
+            var cookieContainer = new CookieContainer();
 
             try
             {
@@ -105,7 +106,6 @@ namespace SF_DataExport
                 var targetUrl = newInstanceUrl;
                 var urlWithAccessCode = GetUrlViaAccessToken(newInstanceUrl, newAccessToken, targetUrl);
 
-                var cookieContainer = new CookieContainer();
                 using (var handler = new HttpClientHandler() { CookieContainer = cookieContainer })
                 {
                     using (var httpClient = new HttpClient(handler))
@@ -115,6 +115,11 @@ namespace SF_DataExport
                         return cookieContainer;
                     }
                 }
+            }
+            catch
+            {
+                LatestSession.OnNext((DateTime.Now, cookieContainer, newInstanceUrl, newAccessToken));
+                throw;
             }
             finally
             {

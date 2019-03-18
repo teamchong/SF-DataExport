@@ -2,7 +2,7 @@
     template,
     props: ['data'],
     data() {
-        return { width: 'auto', height: 'auto' };
+        return { width: 'auto', height: 'auto', overflow: 'visible' };
     },
     mounted() {
         this.$nextTick(function () {
@@ -16,31 +16,32 @@
     },
     methods: {
         createOrgChart(data) {
-            this.$el.style.overflow = 'visible';
-            const { container } = this.$refs;
-            this.removeAllChilds(container);
-            const chart = new OrgChart({
-                chartContainer: '#' + container.id,
-                createNode: (node, data) => {
-                    this.createOrgNode(node, data);
-                },
-                data,
-                direction: 'l2r',
-                nodeContent: 'name',
-                nodeTitle: '_',
-                pan: true,
-                parentNodeSymbol: '',
-                toggleSiblingsResp: true
-            });
-            const emptyNodes = container.querySelectorAll('tr:empty');
-            const len = emptyNodes ? emptyNodes.length : 0;
-            for (let i = 0; i < len; i++) {
-                emptyNodes[i].parentNode.classList.add('empty');
-            }
+            this.resize('auto', 'auto','visible');
             this.$nextTick(function () {
-                const { clientWidth, clientHeight } = chart.chart;
-                this.resize(clientHeight + 'px', clientWidth + 'px');
-                this.$el.style.overflow = 'hidden';
+                const { container } = this.$refs;
+                this.removeAllChilds(container);
+                const chart = new OrgChart({
+                    chartContainer: '#' + container.id,
+                    createNode: (node, data) => {
+                        this.createOrgNode(node, data);
+                    },
+                    data,
+                    direction: 'l2r',
+                    nodeContent: 'name',
+                    nodeTitle: '_',
+                    pan: true,
+                    parentNodeSymbol: '',
+                    toggleSiblingsResp: true
+                });
+                const emptyNodes = container.querySelectorAll('tr:empty');
+                const len = emptyNodes ? emptyNodes.length : 0;
+                for (let i = 0; i < len; i++) {
+                    emptyNodes[i].parentNode.classList.add('empty');
+                }
+                this.$nextTick(function () {
+                    const { clientWidth, clientHeight } = chart.chart;
+                    this.resize(clientHeight + 'px', clientWidth + 'px', 'hidden');
+                });
             });
         },
         createOrgNode(node, { name, users, url }) {
@@ -98,9 +99,10 @@
                 }
             }
         },
-        resize(width, height) {
+        resize(width, height, overflow) {
             this.width = width;
             this.height = height;
+            this.overflow = overflow;
         }
     }
 });

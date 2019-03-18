@@ -81,6 +81,7 @@ namespace SF_DataExport
             var loginUrl = Resource.GetLoginUrl(OrgSettings.Get(o => o[instanceUrl]?[OAuth.ID]));
             var client = new DNFClient(instanceUrl, accessToken, refreshToken);
             await client.TokenRefreshAsync(new Uri(loginUrl), Resource.GetClientIdByLoginUrl(loginUrl)).GoOn();
+            await Resource.GetCookieAsync("", "");
             await SetOrganizationAsync(
                 client.AccessToken,
                 client.InstanceUrl,

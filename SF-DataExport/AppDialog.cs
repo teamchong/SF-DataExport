@@ -13,6 +13,7 @@ using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using System.Threading.Tasks;
 using System.Web;
+using SF_DataExport.Dispatcher;
 using Unit = System.Reactive.Unit;
 
 namespace SF_DataExport
@@ -49,6 +50,7 @@ namespace SF_DataExport
                 var appDialog = new AppDialog(resource, appSettings, orgSettings, appState, appPage);
                 await appState.SubscribeAsync(appPage).GoOn();
                 appState.Commit(new JObject { [AppConstants.ACTION_REDIRECT] = OAuth.REDIRECT_URI });
+                if (!string.IsNullOrEmpty(instanceUrl)) new AttemptLogin().Dispatch(instanceUrl, appState, resource, orgSettings);
                 await isClose.Count().SubscribeOn(TaskPoolScheduler.Default);
                 return appDialog;
             }
@@ -348,6 +350,7 @@ namespace SF_DataExport
                                 {
                                     var loginUrl = Resource.GetLoginUrl(newOrg[OAuth.ID]);
                                     await client.TokenRefreshAsync(new Uri(loginUrl), Resource.GetClientIdByLoginUrl(loginUrl)).GoOn();
+                                    await Resource.GetCookieAsync("", "");
                                     await AppState.SetOrganizationAsync(
                                         (string)newOrg[OAuth.ACCESS_TOKEN],
                                         (string)newOrg[OAuth.INSTANCE_URL],
