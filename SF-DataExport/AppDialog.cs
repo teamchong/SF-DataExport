@@ -349,16 +349,17 @@ namespace SF_DataExport
                                 try
                                 {
                                     var loginUrl = Resource.GetLoginUrl(newOrg[OAuth.ID]);
+                                    Resource.ResetCookie();
                                     await client.TokenRefreshAsync(new Uri(loginUrl), Resource.GetClientIdByLoginUrl(loginUrl)).GoOn();
-                                    try { await Resource.GetCookieAsync("", ""); } catch { }
                                     await AppState.SetOrganizationAsync(
-                                        (string)newOrg[OAuth.ACCESS_TOKEN],
-                                        (string)newOrg[OAuth.INSTANCE_URL],
-                                        (string)newOrg[OAuth.ID],
-                                        (string)newOrg[OAuth.REFRESH_TOKEN]
+                                        client.AccessToken,
+                                        client.InstanceUrl,
+                                        client.Id,
+                                        client.RefreshToken
                                     ).GoOn();
                                     AppState.Commit(AppState.GetOrgSettings());
                                     AppState.SetCurrentInstanceUrl(client);
+                                    await Resource.GetCookieAsync(client.InstanceUrl, client.AccessToken).GoOn();
                                 }
                                 catch (Exception ex)
                                 {

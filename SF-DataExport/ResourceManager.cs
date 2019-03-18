@@ -91,6 +91,11 @@ namespace SF_DataExport
             return result;
         }
 
+        public void ResetCookie()
+        {
+            LatestSession.OnNext((DateTime.Now, new CookieContainer(), "", ""));
+        }
+
         public async Task<CookieContainer> GetCookieAsync(string newInstanceUrl, string newAccessToken)
         {
             await Throttler.WaitAsync();

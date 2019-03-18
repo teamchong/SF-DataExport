@@ -51,14 +51,15 @@ namespace SF_DataExport.Dispatcher
 
                             try
                             {
+                                resource.ResetCookie();
                                 await client.TokenRefreshAsync(new Uri(loginUrl), resource.GetClientIdByLoginUrl(loginUrl)).GoOn();
-                                try { await resource.GetCookieAsync("", ""); } catch { }
                                 await appState.SetOrganizationAsync(
                                     client.AccessToken,
                                     client.InstanceUrl,
                                     client.Id,
                                     client.RefreshToken).GoOn();
                                 appState.SetCurrentInstanceUrl(client);
+                                await resource.GetCookieAsync(client.InstanceUrl, client.AccessToken).GoOn();
                                 return;
                             }
                             catch (IOException ioEx)
