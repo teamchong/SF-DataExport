@@ -52,7 +52,7 @@ namespace SF_DataExport.Dispatcher
                             try
                             {
                                 await client.TokenRefreshAsync(new Uri(loginUrl), resource.GetClientIdByLoginUrl(loginUrl)).GoOn();
-                                await resource.GetCookieAsync("", "");
+                                try { await resource.GetCookieAsync("", ""); } catch { }
                                 await appState.SetOrganizationAsync(
                                     client.AccessToken,
                                     client.InstanceUrl,

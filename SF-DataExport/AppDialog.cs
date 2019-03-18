@@ -350,7 +350,7 @@ namespace SF_DataExport
                                 {
                                     var loginUrl = Resource.GetLoginUrl(newOrg[OAuth.ID]);
                                     await client.TokenRefreshAsync(new Uri(loginUrl), Resource.GetClientIdByLoginUrl(loginUrl)).GoOn();
-                                    await Resource.GetCookieAsync("", "");
+                                    try { await Resource.GetCookieAsync("", ""); } catch { }
                                     await AppState.SetOrganizationAsync(
                                         (string)newOrg[OAuth.ACCESS_TOKEN],
                                         (string)newOrg[OAuth.INSTANCE_URL],
