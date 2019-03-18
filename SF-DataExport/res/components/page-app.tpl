@@ -64,7 +64,7 @@
         </div>
     </div>
 	
-    <section :class="['slds-popover','slds-nubbin_top-right',showUserPopover?'':'slds-popover_hide']" style="position:absolute;top:3.2em;right:14.2em;width:450px;z-index:99999">
+    <section :class="['slds-popover','slds-nubbin_top-right',showUserPopover?'':'slds-popover_hide']" style="position:fixed;top:3.2em;right:14.2em;width:450px;z-index:99999">
         <button class="slds-button slds-button_icon slds-button_icon-small slds-float_right slds-popover__close" title="Close"
                 @click="dispatch('showUserPopover',false)">
             <svg class="slds-button__icon">
