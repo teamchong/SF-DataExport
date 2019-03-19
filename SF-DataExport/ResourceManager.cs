@@ -40,6 +40,7 @@ namespace SF_DataExport
 <link rel='stylesheet' type='text/css' href='/slds.css'/>
 <link rel='stylesheet' type='text/css' href='/orgchart.css'/>
 <link rel='stylesheet' type='text/css' href='/font-awesome.css'/>
+<link rel='stylesheet' type='text/css' href='/handsontable.css'/>
 <link rel='stylesheet' type='text/css' href='/app.css'/>
 </head>
 <body>
