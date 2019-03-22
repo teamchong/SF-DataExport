@@ -4,6 +4,7 @@ using System;
 using System.Linq;
 using System.Linq.Expressions;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace SF_DataExport
@@ -12,11 +13,13 @@ namespace SF_DataExport
     {
         JObject Data { get; set; }
         string JsonFilePath { get; set; }
+        SemaphoreSlim Throttler { get; }
 
         public JsonConfig(string jsonFilePath)
         {
             JsonFilePath = jsonFilePath;
             Data = ReadFile();
+            Throttler = new SemaphoreSlim(1, 1);
         }
 
         public string GetFilePath() => JsonFilePath;
@@ -41,7 +44,7 @@ namespace SF_DataExport
                     {
                         using (var reader = new StreamReader(stream))
                         {
-                            json = JsonConvert.DeserializeObject<JObject>(reader.ReadToEnd());
+                            json = JsonConvert.DeserializeObject<JObject>(reader.ReadToEnd()) ?? new JObject();
                         }
                     }
                 }
@@ -67,19 +70,34 @@ namespace SF_DataExport
 
         public Task SaveAysnc()
         {
-            return SaveAysnc(obj => { });
+            return SaveAysnc(obj => obj);
         }
 
-        public async Task SaveAysnc(Action<JObject> setter)
+        public Task SaveAysnc(Action<JObject> setter)
         {
             setter(Data);
-            var fi = new FileInfo(JsonFilePath);
-            using (var stream = fi.Open(FileMode.Create, FileAccess.Write, FileShare.None))
+            return SaveAysnc();
+        }
+
+        public async Task SaveAysnc(Func<JObject, JObject> setter)
+        {
+            await Throttler.WaitAsync().GoOn();
+
+            try
             {
-                using (var writer = new StreamWriter(stream))
+                Data = setter(Data);
+                var fi = new FileInfo(JsonFilePath);
+                using (var stream = fi.Open(FileMode.Create, FileAccess.Write, FileShare.None))
                 {
-                    await writer.WriteAsync(Data.ToString()).GoOn();
+                    using (var writer = new StreamWriter(stream))
+                    {
+                        await writer.WriteAsync(Data.ToString()).GoOn();
+                    }
                 }
+            }
+            finally
+            {
+                Throttler.Release();
             }
         }
     }

@@ -11,18 +11,18 @@ namespace SF_DataExport
 {
     public abstract class InterceptorBase
     {
-        public virtual Task<bool> RequestAsync(Page appPage, Request request) => Task.FromResult(false);
+        public virtual Task<bool> RequestAsync(Page appPage, Request request) => null;
 
-        public virtual Task<bool> RequestFinishedAsync(Page appPage, Request request) => Task.FromResult(false);
+        public virtual Task<bool> RequestFinishedAsync(Page appPage, Request request) => null;
 
-        public virtual Task<bool> RequestFailedAsync(Page appPage, Request request) => Task.FromResult(false);
+        public virtual Task<bool> RequestFailedAsync(Page appPage, Request request) => null;
 
-        public virtual Task<bool> ResponseAsync(Page appPage, Response request) => Task.FromResult(false);
+        public virtual Task<bool> ResponseAsync(Page appPage, Response request) => null;
 
-        public virtual Task<bool> DOMContentLoadedAsync(Page appPage) => Task.FromResult(false);
+        public virtual Task<bool> DOMContentLoadedAsync(Page appPage) => null;
         
-        public virtual Task<bool> ErrorAsync(Page appPage, string errorMessage) => Task.FromResult(false);
+        public virtual Task<bool> ErrorAsync(Page appPage, string errorMessage) => null;
         
-        public virtual Task<bool> PageErrorAsync(Page appPage, string errorMessage) => Task.FromResult(false);
+        public virtual Task<bool> PageErrorAsync(Page appPage, string errorMessage) => null;
     }
 }

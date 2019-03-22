@@ -423,27 +423,20 @@ namespace SF_DataExport
             var newFilePath = Path.Combine(newDirectoryPath, AppConstants.JSON_ORG_SETTINGS);
             
             var oldDirectoryPath = OrgSettings.GetDirectoryPath();
-            var oldFilePath = Path.Combine(oldDirectoryPath, AppConstants.JSON_ORG_SETTINGS);
+            var oldFile = new FileInfo(Path.Combine(oldDirectoryPath, AppConstants.JSON_ORG_SETTINGS));
 
-            if (newFilePath != oldFilePath)
+            if (newFilePath != oldFile.FullName)
             {
                 try
                 {
                     var orgData = OrgSettings.Get(d => d);
                     Directory.CreateDirectory(newDirectoryPath);
 
-                    var fi = new FileInfo(newFilePath);
-                    using (var stream = fi.Open(FileMode.Create, FileAccess.Write, FileShare.None))
-                    {
-                        using (var writer = new StreamWriter(stream))
-                        {
-                            await writer.WriteAsync(orgData.ToString()).GoOn();
-                        }
-                    }
-
-                    try { File.Delete(oldFilePath); } catch { }
-                    await AppSettings.SaveAysnc(o => o[AppConstants.PATH_ORG_SETTINGS] = newDirectoryPath).GoOn();
                     OrgSettings.SetPath(newFilePath);
+                    await OrgSettings.SaveAysnc(_old => orgData).GoOn();
+
+                    try { oldFile.Delete(); } catch { }
+                    await AppSettings.SaveAysnc(o => o[AppConstants.PATH_ORG_SETTINGS] = newDirectoryPath).GoOn();
                     Commit(new JObject { [AppConstants.PATH_ORG_SETTINGS] = OrgSettings.GetDirectoryPath() });
                     return null;
                 }

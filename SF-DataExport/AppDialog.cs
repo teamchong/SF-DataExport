@@ -109,41 +109,59 @@ namespace SF_DataExport
 
         async void Page_Error(object sender, ErrorEventArgs e)
         {
-            var appPage = sender as Page;
-            if (appPage != null)
+            try
             {
-                foreach (var interceptor in Interceptors)
+                var appPage = sender as Page;
+                if (appPage != null)
                 {
-                    if (await interceptor.ErrorAsync(appPage, e.Error).GoOn())
+                    foreach (var interceptor in Interceptors)
                     {
-                        return;
-                    }
-                }
+                        var func = interceptor.ErrorAsync(appPage, e.Error);
 
-                Console.WriteLine("Error: " + e.Error);
+                        if (func != null && await func.GoOn())
+                        {
+                            return;
+                        }
+                    }
+
+                    Console.WriteLine("Error: " + e.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.ToString());
             }
         }
 
         async void Page_PageError(object sender, PageErrorEventArgs e)
         {
-            var appPage = sender as Page;
-            if (appPage != null)
+            try
             {
-                foreach (var interceptor in Interceptors)
+                var appPage = sender as Page;
+                if (appPage != null)
                 {
-                    if (await interceptor.PageErrorAsync(appPage, e.Message).GoOn())
+                    foreach (var interceptor in Interceptors)
                     {
-                        return;
-                    }
-                }
+                        var func = interceptor.PageErrorAsync(appPage, e.Message);
 
-                Console.WriteLine("PageError: " + e.Message);
+                        if (func != null && await func.GoOn())
+                        {
+                            return;
+                        }
+                    }
+
+                    Console.WriteLine("PageError: " + e.Message);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.ToString());
             }
         }
 
         async void Page_Console(object sender, ConsoleEventArgs e)
         {
-            await Observable.FromAsync(async () =>
+            try
             {
                 var messages = new List<string>();
                 if (e.Message.Args != null)
@@ -168,88 +186,135 @@ namespace SF_DataExport
                     "Line: " + e.Message.Location.LineNumber + "\n" +
                     "Column: " + e.Message.Location.ColumnNumber + "\n" +
                     (messages.Count > 0 ? string.Join(Environment.NewLine, messages) : ""));
-            })
-            .Catch((Exception ex) => Observable.Return(Unit.Default))
-            .SubscribeOn(TaskPoolScheduler.Default);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.ToString());
+            }
         }
 
         async void Page_Response(object sender, ResponseCreatedEventArgs e)
         {
-            var appPage = sender as Page;
-            if (appPage != null)
+            try
             {
-                foreach (var interceptor in Interceptors)
+                var appPage = sender as Page;
+                if (appPage != null)
                 {
-                    if (await interceptor.ResponseAsync(appPage, e.Response).GoOn())
+                    foreach (var interceptor in Interceptors)
                     {
-                        return;
-                    }
-                }
+                        var func = interceptor.ResponseAsync(appPage, e.Response);
 
-                Console.WriteLine("Response: " + e.Response?.Url);
+                        if (func != null && await func.GoOn())
+                        {
+                            return;
+                        }
+                    }
+
+                    //Console.WriteLine("Response: " + e.Response?.Url);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.ToString());
             }
         }
 
         async void Page_Request(object sender, RequestEventArgs e)
         {
-            var appPage = sender as Page;
-            if (appPage != null)
+            try
             {
-                foreach (var interceptor in Interceptors)
+                var appPage = sender as Page;
+                if (appPage != null)
                 {
-                    if (await interceptor.RequestAsync(appPage, e.Request).GoOn())
+                    foreach (var interceptor in Interceptors)
                     {
-                        return;
-                    }
-                }
+                        var func = interceptor.RequestAsync(appPage, e.Request);
 
-                await AppState.IntercepObservable(appPage, e.Request, () => e.Request.ContinueAsync());
+                        if (func != null && await func.GoOn())
+                        {
+                            return;
+                        }
+                    }
+
+                    await AppState.IntercepObservable(appPage, e.Request, () => e.Request.ContinueAsync());
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.ToString());
             }
         }
 
         async void Page_RequestFinished(object sender, RequestEventArgs evt)
         {
-            var appPage = sender as Page;
-            if (appPage != null)
+            try
             {
-                foreach (var interceptor in Interceptors)
+                var appPage = sender as Page;
+                if (appPage != null)
                 {
-                    if (await interceptor.RequestFinishedAsync(appPage, evt.Request).GoOn())
+                    foreach (var interceptor in Interceptors)
                     {
-                        return;
+                        var func = interceptor.RequestFinishedAsync(appPage, evt.Request);
+
+                        if (func != null && await func.GoOn())
+                        {
+                            return;
+                        }
                     }
                 }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.ToString());
             }
         }
 
         async void Page_RequestFailed(object sender, RequestEventArgs evt)
         {
-            var appPage = sender as Page;
-            if (appPage != null)
+            try
             {
-                foreach (var interceptor in Interceptors)
+                var appPage = sender as Page;
+                if (appPage != null)
                 {
-                    if (await interceptor.RequestFailedAsync(appPage, evt.Request).GoOn())
+                    foreach (var interceptor in Interceptors)
                     {
-                        return;
+                        var func = interceptor.RequestFailedAsync(appPage, evt.Request);
+
+                        if (func != null && await func.GoOn())
+                        {
+                            return;
+                        }
                     }
+                    Console.WriteLine("RequestFailed: " + evt.Request.Url);
                 }
-                Console.WriteLine("RequestFailed: " + evt.Request.Url);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.ToString());
             }
         }
 
         async void Page_DOMContentLoaded(object sender, EventArgs evt)
         {
-            var appPage = sender as Page;
-            if (appPage != null)
+            try
             {
-                foreach (var interceptor in Interceptors)
+                var appPage = sender as Page;
+                if (appPage != null)
                 {
-                    if (await interceptor.DOMContentLoadedAsync(appPage).GoOn())
+                    foreach (var interceptor in Interceptors)
                     {
-                        return;
+                        var func = interceptor.DOMContentLoadedAsync(appPage);
+
+                        if (func != null && await func.GoOn())
+                        {
+                            return;
+                        }
                     }
                 }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.ToString());
             }
         }
     }
