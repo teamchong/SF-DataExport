@@ -7,17 +7,17 @@
         <ul>
             <li style="margin:2em;" v-for="org in orgSettings">
                 <div class="slds-box">
-                    <button class="slds-button slds-button_neutral slds-button_stretch" style="padding:1em;font-size:150%;text-align:left;margin-bottom:0.2em" @click="dispatch('attemptLogin',org)">
+                    <button class="slds-button slds-button_neutral slds-button_stretch" style="padding:1em;font-size:150%;text-align:left;margin-bottom:0.2em" @click="dispatch('AttemptLogin',org)">
                         <button-iconleft type="standard" icon="default" class="slds-icon_large"></button-iconleft>
                         {{org|orgname}}
                     </button>
 
-                    <button class="slds-button slds-button_neutral" @click="dispatch('removeOrg',org)">
+                    <button class="slds-button slds-button_neutral" @click="dispatch('RemoveOrg',org)">
                         <button-iconleft type="action" icon="remove"></button-iconleft>
                         Revoke Access
                     </button>
 
-                    <button class="slds-button slds-button_neutral" v-if="orgHasOfflineAccess(org)" @click="dispatch('removeOfflineAccess',org)">
+                    <button class="slds-button slds-button_neutral" v-if="orgHasOfflineAccess(org)" @click="dispatch('RemoveOfflineAccess',org)">
                         <button-iconleft type="action" icon="remove"></button-iconleft>
                         Remove Offline Access
                     </button>
@@ -29,7 +29,7 @@
     <ul>
         <li style="margin:2em;">
             <div class="slds-box">
-                <button class="slds-button slds-button_neutral" style="width:100%;padding:1em;font-size:150%;text-align:left" @click="dispatch('attemptLogin','login.salesforce.com')">
+                <button class="slds-button slds-button_neutral" style="width:100%;padding:1em;font-size:150%;text-align:left" @click="dispatch('AttemptLogin','login.salesforce.com')">
                     <button-iconleft type="standard" icon="default" class="slds-icon_large"></button-iconleft>
                     Production (login.salesforce.com)
                 </button>
@@ -37,7 +37,7 @@
         </li>
         <li style="margin:2em;">
             <div class="slds-box">
-                <button class="slds-button slds-button_neutral" style="width:100%;padding:1em;font-size:150%;text-align:left" @click="dispatch('attemptLogin','test.salesforce.com')">
+                <button class="slds-button slds-button_neutral" style="width:100%;padding:1em;font-size:150%;text-align:left" @click="dispatch('AttemptLogin','test.salesforce.com')">
                     <button-iconleft type="standard" icon="default" class="slds-icon_large"></button-iconleft>
                     Sandbox (test.salesforce.com)
                 </button>
@@ -45,7 +45,7 @@
         </li>
         <!--<li style="margin:2em;">
             <div class="slds-box">
-                <button class="slds-button slds-button_neutral" style="width:100%;padding:1em;font-size:150%;text-align:left" @click="dispatch('attemptLogin',customLoginUrl)" :disabled="!customLoginUrl">
+                <button class="slds-button slds-button_neutral" style="width:100%;padding:1em;font-size:150%;text-align:left" @click="dispatch('AttemptLogin',customLoginUrl)" :disabled="!customLoginUrl">
                     <button-iconleft type="standard" icon="default" class="slds-icon_large"></button-iconleft>
                     Custom ({{customLoginUrlHint}})
                 </button>
@@ -60,6 +60,6 @@
     <hr />
 	<dir-element v-model="orgSettingsPath" label=" settings file path"></dir-element>
     <div class="slds-float_right">
-        <button class="slds-button slds-button_success" @click="dispatch('setOrgSettingsPath',orgSettingsPath)">Save path</button>
+        <button class="slds-button slds-button_success" @click="dispatch('SetOrgSettingsPath',orgSettingsPath)">Save path</button>
     </div>
 </v-modal>

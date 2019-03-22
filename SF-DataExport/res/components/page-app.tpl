@@ -76,22 +76,22 @@
                 <spinner class="slds-spinner slds-spinner_x-small" style="top:3em;"></spinner>
             </div>
             <div :class="[userItems.length?'':'hidden']">
-                <a class="slds-button slds-button_neutral" href="javascript:void(0)" @click="dispatch('viewPage',currentInstanceUrl+'/'+popoverUserId+'?noredirect=1')"
+                <a class="slds-button slds-button_neutral" href="javascript:void(0)" @click="dispatch('ViewPage',currentInstanceUrl+'/'+popoverUserId+'?noredirect=1')"
                     :disabled="!popoverUserId">
                     View Setup Page
                 </a>
-                <a class="slds-button slds-button_neutral" href="javascript:void(0)" @click="dispatch('viewPage',currentInstanceUrl+'/_ui/core/userprofile/UserProfilePage?u='+popoverUserId+'&tab=sfdc.ProfilePlatformOverview')"
+                <a class="slds-button slds-button_neutral" href="javascript:void(0)" @click="dispatch('ViewPage',currentInstanceUrl+'/_ui/core/userprofile/UserProfilePage?u='+popoverUserId+'&tab=sfdc.ProfilePlatformOverview')"
                     :disabled="!popoverUserId">
                     View Profile Page
                 </a>
                 <!--<button class="slds-button slds-button_neutral"
-                        @click="dispatch('switchUser',{instanceUrl:currentInstanceUrl,userId:popoverUserId})"
+                        @click="dispatch('SwitchUser',{instanceUrl:currentInstanceUrl,userId:popoverUserId})"
                         :disabled="!popoverUserId">
                     Switch User
                 </button>-->
 				<div class="slds-box" style="margin-top:0.1em;margin-bottom:0.1em;">
 					<button class="slds-button slds-button_neutral"
-							@click="dispatch('loginAsUser',{instanceUrl:currentInstanceUrl,userId:popoverUserId})"
+							@click="dispatch('LoginAsUser',{instanceUrl:currentInstanceUrl,userId:popoverUserId})"
 							:disabled="!popoverUserId" style="width:100%">
 						Login As
 					</button>

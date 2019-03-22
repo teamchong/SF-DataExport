@@ -7,6 +7,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Net.Http;
+using System.Threading.Tasks;
 using System.Reactive.Concurrency;
 using System.Reactive.Linq;
 using System.Text.RegularExpressions;
@@ -14,26 +15,37 @@ using System.Web;
 
 namespace SF_DataExport.Dispatcher
 {
-    public class DownloadExports
+    public class DownloadExports : IDispatcher
     {
-        public void Dispatch(JToken payload, AppStateManager appState, ResourceManager resource, JsonConfig orgSettings)
+        AppStateManager AppState { get; }
+        ResourceManager Resource { get; }
+        OrgSettingsConfig OrgSettings { get; }
+
+        public DownloadExports(AppStateManager appState, ResourceManager resource, OrgSettingsConfig orgSettings)
         {
-            appState.Commit(new JObject { ["isLoading"] = true });
-            Observable.FromAsync(async () =>
+            AppState = appState;
+            Resource = resource;
+            OrgSettings = orgSettings;
+        }
+
+        public async Task<JToken> DispatchAsync(JToken payload)
+        {
+            try
             {
+                AppState.Commit(new JObject { ["isLoading"] = true });
                 var exportPath = (string)payload["exportPath"] ?? "";
                 var instanceUrl = (string)payload["instanceUrl"] ?? "";
                 var exportEmails = (string)payload["exportEmails"] ?? "";
 
-                var id = (string)orgSettings.Get(o => o[instanceUrl]?[OAuth.ID]) ?? "";
-                var accessToken = (string)orgSettings.Get(o => o[instanceUrl]?[OAuth.ACCESS_TOKEN]) ?? "";
-                var redirectUri = resource.GetRedirectUrlByLoginUrl(id);
+                var id = (string)OrgSettings.Get(o => o[instanceUrl]?[OAuth.ID]) ?? "";
+                var accessToken = (string)OrgSettings.Get(o => o[instanceUrl]?[OAuth.ACCESS_TOKEN]) ?? "";
+                var redirectUri = Resource.GetRedirectUrlByLoginUrl(id);
                 var targetPage = "/ui/setup/export/DataExportPage/d";
                 var targetUrl = instanceUrl + targetPage;
                 var exportResult = new System.Text.StringBuilder();
                 exportResult.Append("Loading page ").AppendLine(targetPage);
                 var exportResultFiles = new JObject();
-                appState.Commit(new JObject
+                AppState.Commit(new JObject
                 {
                     ["exportCount"] = null,
                     ["exportResult"] = exportResult.ToString(),
@@ -43,7 +55,7 @@ namespace SF_DataExport.Dispatcher
 
                 try
                 {
-                    await resource.RunClientAsync(async (httpClient, cookieContainer, htmlContent) =>
+                    await Resource.RunClientAsync(async (httpClient, cookieContainer, htmlContent) =>
                     {
                         //httpClient.Timeout = TimeSpan.FromHours(2);
 
@@ -68,14 +80,14 @@ namespace SF_DataExport.Dispatcher
                                     if (href.StartsWith('/')) href = instanceUrl + href;
                                     subject.Add((HttpUtility.UrlDecode(filename), href));
                                     exportResultFiles[href] = "Pending...";
-                                    appState.Commit(new JObject { ["exportResultFiles"] = exportResultFiles });
+                                    AppState.Commit(new JObject { ["exportResultFiles"] = exportResultFiles });
                                 }
                             }
                         }
 
                         Console.WriteLine(subject.Count + " files found for download.");
                         exportResult.Append("Found ").Append(subject.Count).AppendLine(" files.");
-                        appState.Commit(new JObject { ["exportCount"] = subject.Count, ["exportResult"] = exportResult.ToString() });
+                        AppState.Commit(new JObject { ["exportCount"] = subject.Count, ["exportResult"] = exportResult.ToString() });
 
                         if (subject.Count > 0)
                         {
@@ -97,8 +109,8 @@ namespace SF_DataExport.Dispatcher
                                                     {
                                                         var fileSize = new FileInfo(fileName).Length;
                                                         Console.WriteLine("Skipped... " + fileName);
-                                                        exportResultFiles[fileUrl] = "Skipped..." + resource.GetDisplaySize(fileSize);
-                                                        appState.Commit(new JObject { ["exportResultFiles"] = exportResultFiles });
+                                                        exportResultFiles[fileUrl] = "Skipped..." + Resource.GetDisplaySize(fileSize);
+                                                        AppState.Commit(new JObject { ["exportResultFiles"] = exportResultFiles });
                                                         return Observable.Return(fileSize);
                                                     }
                                                 }
@@ -118,15 +130,19 @@ namespace SF_DataExport.Dispatcher
                                                 }
                                                 Console.WriteLine("Downloading..." + fileName);
                                                 exportResultFiles[fileUrl] = "Downloading...";
-                                                appState.Commit(new JObject { ["exportResultFiles"] = exportResultFiles });
+                                                AppState.Commit(new JObject { ["exportResultFiles"] = exportResultFiles });
 
                                                 using (var response = await httpClient.GetAsync(fileUrl, HttpCompletionOption.ResponseHeadersRead).GoOn())
                                                 {
                                                     using (var inStream = await response.Content.ReadAsStreamAsync())
                                                     {
-                                                        using (var outStream = new FileStream(outFile, FileMode.Create, FileAccess.Write, FileShare.None))
+                                                        var outFi = new FileInfo(outFile);
+                                                        if (outFi.Exists)
                                                         {
-                                                            await inStream.CopyToAsync(outStream, 1024 * 4);
+                                                            using (var outStream = outFi.Open(FileMode.Create, FileAccess.Write, FileShare.None))
+                                                            {
+                                                                await inStream.CopyToAsync(outStream, 1024 * 4);
+                                                            }
                                                         }
                                                     }
                                                 }
@@ -135,8 +151,8 @@ namespace SF_DataExport.Dispatcher
                                                 {
                                                     var fileSize = new FileInfo(fileName).Length;
                                                     Console.WriteLine("Downloaded... " + fileName);
-                                                    exportResultFiles[fileUrl] = "Downloaded..." + resource.GetDisplaySize(fileSize);
-                                                    appState.Commit(new JObject { ["exportResultFiles"] = exportResultFiles });
+                                                    exportResultFiles[fileUrl] = "Downloaded..." + Resource.GetDisplaySize(fileSize);
+                                                    AppState.Commit(new JObject { ["exportResultFiles"] = exportResultFiles });
                                                     return fileSize;
                                                 }
                                             })
@@ -144,7 +160,7 @@ namespace SF_DataExport.Dispatcher
                                             {
                                                 Console.WriteLine("Trying... " + fileName + "\n" + ex.ToString());
                                                 exportResultFiles[fileUrl] = "Trying..." + ex.ToString();
-                                                appState.Commit(new JObject { ["exportResultFiles"] = exportResultFiles });
+                                                AppState.Commit(new JObject { ["exportResultFiles"] = exportResultFiles });
                                                 return Observable.Throw<long>(ex);
                                             }))
                                             .Retry(10)
@@ -152,7 +168,7 @@ namespace SF_DataExport.Dispatcher
                                             {
                                                 Console.WriteLine("Failed... " + fileName + "\n" + ex.ToString());
                                                 exportResultFiles[fileUrl] = "Failed...(" + (++tryCount) + ") " + ex.ToString();
-                                                appState.Commit(new JObject { ["exportResultFiles"] = exportResultFiles });
+                                                AppState.Commit(new JObject { ["exportResultFiles"] = exportResultFiles });
                                                 return Observable.Return(0L);
                                             }));
                                         });
@@ -184,7 +200,7 @@ namespace SF_DataExport.Dispatcher
                                             ["emailSubject"] = "Download Data Exports" +
                                                 (downloaded > 0 ? " " + downloaded + " downloaded" : "") +
                                                 (failed > 0 ? " " + failed + " failed" : "") +
-                                                " total " + resource.GetDisplaySize(totalSize),
+                                                " total " + Resource.GetDisplaySize(totalSize),
                                             ["senderType"] = "CurrentUser",
                                         })
                                 }, new Uri($"{client.InstanceUrl}/services/data/{client.ApiVersion}/actions/standard/emailSimple")))
@@ -192,9 +208,9 @@ namespace SF_DataExport.Dispatcher
                                 .Catch((Exception ex) => Observable.Defer(() => Observable.Start(() => Console.WriteLine(ex.ToString()))))
                                 .SubscribeOn(TaskPoolScheduler.Default);
                             }
-                            Console.WriteLine("Export completed " + resource.GetDisplaySize(totalSize));
-                            exportResult.Append("Export completed " + resource.GetDisplaySize(totalSize));
-                            appState.Commit(new JObject
+                            Console.WriteLine("Export completed " + Resource.GetDisplaySize(totalSize));
+                            exportResult.Append("Export completed " + Resource.GetDisplaySize(totalSize));
+                            AppState.Commit(new JObject
                             {
                                 ["exportResult"] = exportResult.ToString(),
                                 ["exportResultFiles"] = exportResultFiles
@@ -205,7 +221,7 @@ namespace SF_DataExport.Dispatcher
                         {
                             Console.WriteLine("Export completed");
                             exportResult.Append("Export completed");
-                            appState.Commit(new JObject
+                            AppState.Commit(new JObject
                             {
                                 ["exportResult"] = exportResult.ToString(),
                                 ["exportResultFiles"] = exportResultFiles
@@ -216,11 +232,14 @@ namespace SF_DataExport.Dispatcher
                 }
                 catch (Exception ex)
                 {
-                    appState.Commit(new JObject { ["alertMessage"] = ex.Message });
+                    AppState.Commit(new JObject { ["alertMessage"] = ex.Message });
                 }
-            })
-            .Finally(() => appState.Commit(new JObject { ["isLoading"] = false }))
-            .ScheduleTask();
+            }
+            finally
+            {
+                AppState.Commit(new JObject { ["isLoading"] = false });
+            }
+            return null;
         }
     }
 }

@@ -21,26 +21,37 @@ using Unit = System.Reactive.Unit;
 
 namespace SF_DataExport.Dispatcher
 {
-    public class SetOrgSettingsPath
+    public class SetOrgSettingsPath : IDispatcher
     {
-        public void Dispatch(JToken payload, AppStateManager appState)
+        AppStateManager AppState { get; }
+
+        public SetOrgSettingsPath(AppStateManager appState)
         {
-            appState.Commit(new JObject { ["isLoading"] = true });
-            Observable.FromAsync(async () =>
+            AppState = appState;
+        }
+
+        public async Task<JToken> DispatchAsync(JToken payload)
+        {
+            try
             {
+                AppState.Commit(new JObject { ["isLoading"] = true });
+
                 var orgSettingsPath = (string)payload ?? "";
-                var errorMessage = await appState.SaveOrgSettingsPathAsync(orgSettingsPath).GoOn();
+                var errorMessage = await AppState.SaveOrgSettingsPathAsync(orgSettingsPath).GoOn();
                 if (errorMessage == null)
                 {
-                    appState.Commit(new JObject { ["alertMessage"] = "Save successfully." });
+                    AppState.Commit(new JObject { ["alertMessage"] = "Save successfully." });
                 }
                 else
                 {
-                    appState.Commit(new JObject { ["alertMessage"] = "No change." });
+                    AppState.Commit(new JObject { ["alertMessage"] = "No change." });
                 }
-            })
-            .Finally(() => appState.Commit(new JObject { ["isLoading"] = false }))
-            .ScheduleTask();
+            }
+            finally
+            {
+                AppState.Commit(new JObject { ["isLoading"] = false });
+            }
+            return null;
         }
     }
 }

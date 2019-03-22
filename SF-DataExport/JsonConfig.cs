@@ -23,7 +23,8 @@ namespace SF_DataExport
 
         public string GetDirectoryPath() => Path.GetDirectoryName(JsonFilePath).TrimEnd(Path.DirectorySeparatorChar);
 
-        public void SetPath(string jsonFilePath) {
+        public void SetPath(string jsonFilePath)
+        {
             JsonFilePath = jsonFilePath;
             Data = ReadFile();
         }
@@ -33,11 +34,15 @@ namespace SF_DataExport
             var json = new JObject();
             try
             {
-                using (var stream = new FileStream(JsonFilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                var fi = new FileInfo(JsonFilePath);
+                if (fi.Exists)
                 {
-                    using (var reader = new StreamReader(stream))
+                    using (var stream = fi.Open(FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
                     {
-                        json = JsonConvert.DeserializeObject<JObject>(reader.ReadToEnd());
+                        using (var reader = new StreamReader(stream))
+                        {
+                            json = JsonConvert.DeserializeObject<JObject>(reader.ReadToEnd());
+                        }
                     }
                 }
             }
@@ -68,7 +73,14 @@ namespace SF_DataExport
         public async Task SaveAysnc(Action<JObject> setter)
         {
             setter(Data);
-            await File.WriteAllTextAsync(JsonFilePath, Data.ToString()).GoOn();
+            var fi = new FileInfo(JsonFilePath);
+            using (var stream = fi.Open(FileMode.Create, FileAccess.Write, FileShare.None))
+            {
+                using (var writer = new StreamWriter(stream))
+                {
+                    await writer.WriteAsync(Data.ToString()).GoOn();
+                }
+            }
         }
     }
 }

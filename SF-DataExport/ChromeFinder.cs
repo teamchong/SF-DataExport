@@ -10,7 +10,7 @@ namespace SF_DataExport
     class ChromeFinder
     {
         Regex NewLineRegex = new Regex("\\r?\\n");
-        ResourceManager Resource {  get; set; }
+        ResourceManager Resource { get; }
 
         public ChromeFinder(ResourceManager resource)
         {
@@ -112,7 +112,7 @@ namespace SF_DataExport
                 priorities.Insert(0, (new Regex(Environment.GetEnvironmentVariable("CHROME_PATH")), 101));
 
             return installations.Where(s => !string.IsNullOrEmpty(s)).Distinct()
-                .OrderBy(s => priorities.Where(p => p.regex.IsMatch(s)).Select(p => p.weight).FirstOrDefault() )
+                .OrderBy(s => priorities.Where(p => p.regex.IsMatch(s)).Select(p => p.weight).FirstOrDefault())
                 .FirstOrDefault();
         }
 
@@ -148,7 +148,7 @@ namespace SF_DataExport
                 Environment.GetEnvironmentVariable("ProgramFiles"),
                 Environment.GetEnvironmentVariable("ProgramFiles(x86)"),
             }.Where(s => !string.IsNullOrEmpty(s)).ToHashSet();
-            
+
             foreach (var prefix in prefixes)
             {
                 var chromePath = Path.Combine(prefix, suffix);

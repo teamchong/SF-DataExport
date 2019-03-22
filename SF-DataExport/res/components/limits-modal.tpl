@@ -1,4 +1,4 @@
-﻿<v-modal @close="dispatch('showLimitsModal',false)" :modalStyle="{'min-width':'95vw',width:'95vw','max-width':'95vw'}">
+﻿<v-modal @close="dispatch('GetLimits',false)" :modalStyle="{'min-width':'95vw',width:'95vw','max-width':'95vw'}">
     <template #header>
 		<ul class="slds-tabs_default__nav">
 			<li :class="['slds-tabs_default__item',tab!=='logging'?'slds-is-active':'']" title="Org Limits">
@@ -31,7 +31,7 @@
 				
 				<hr />
 				<div class="slds-form-element">
-					<button class="slds-button slds-button_success" @click="dispatch('showLimitsModal', {instanceUrl:currentInstanceUrl})">
+					<button class="slds-button slds-button_success" @click="dispatch('GetLimits', {instanceUrl:currentInstanceUrl})">
 						Refresh
 					</button>
 				</div>

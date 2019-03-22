@@ -21,23 +21,35 @@ using Unit = System.Reactive.Unit;
 
 namespace SF_DataExport.Dispatcher
 {
-    public class ViewDownloadExports
+    public class ViewDownloadExports : IDispatcher
     {
-        public void Dispatch(JToken payload, AppStateManager appState, ResourceManager resource, JsonConfig appSettings, JsonConfig orgSettings)
+        ResourceManager Resource { get;  }
+        AppSettingsConfig AppSettings { get; }
+        OrgSettingsConfig OrgSettings { get; }
+
+        public ViewDownloadExports(ResourceManager resource, AppSettingsConfig appSettings, OrgSettingsConfig orgSettings)
+        {
+            Resource = resource;
+            AppSettings = appSettings;
+            OrgSettings = orgSettings;
+        }
+
+        public Task<JToken> DispatchAsync(JToken payload)
         {
             var exportPath = (string)payload?["exportPath"] ?? "";
             var instanceUrl = (string)payload?["instanceUrl"] ?? "";
             var userId = (string)payload?["userId"] ?? "";
 
-            var id = (string)orgSettings.Get(o => o[instanceUrl]?[OAuth.ID]) ?? "";
-            var accessToken = (string)orgSettings.Get(o => o[instanceUrl]?[OAuth.ACCESS_TOKEN]) ?? "";
-            var redirectUri = resource.GetRedirectUrlByLoginUrl(id);
+            var id = (string)OrgSettings.Get(o => o[instanceUrl]?[OAuth.ID]) ?? "";
+            var accessToken = (string)OrgSettings.Get(o => o[instanceUrl]?[OAuth.ACCESS_TOKEN]) ?? "";
+            var redirectUri = Resource.GetRedirectUrlByLoginUrl(id);
             var targeturl = string.IsNullOrEmpty(userId) ?
                 instanceUrl + "/ui/setup/export/DataExportPage/d?setupid=DataManagementExport" :
-                resource.GetLoginUrlAs(instanceUrl, id, userId,
+                Resource.GetLoginUrlAs(instanceUrl, id, userId,
                 "/ui/setup/export/DataExportPage/d?setupid=DataManagementExport");
-            var urlWithAccessCode = resource.GetUrlViaAccessToken(instanceUrl, accessToken, targeturl);
-            resource.OpenIncognitoBrowser(urlWithAccessCode, appSettings.GetString(AppConstants.PATH_CHROME));
+            var urlWithAccessCode = Resource.GetUrlViaAccessToken(instanceUrl, accessToken, targeturl);
+            Resource.OpenIncognitoBrowser(urlWithAccessCode, AppSettings.GetString(AppConstants.PATH_CHROME));
+            return Task.FromResult<JToken>(null);
         }
     }
 }

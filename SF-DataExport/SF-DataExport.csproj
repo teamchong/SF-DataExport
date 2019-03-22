@@ -12,7 +12,7 @@
     <ApplicationIcon>favicon.ico</ApplicationIcon>
     <StartupObject />
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <Version>1.0.3.3005</Version>
+    <Version>1.0.4.0001</Version>
     <RepositoryUrl>https://github.com/ste80/sf-dataexport</RepositoryUrl>
     <RepositoryType>GIT</RepositoryType>
     <PackageProjectUrl>https://github.com/ste80/sf-dataexport</PackageProjectUrl>
@@ -27,8 +27,9 @@
   <ItemGroup>
     <PackageReference Include="CsvHelper" Version="12.1.2" />
     <PackageReference Include="DotNetForce" Version="5.1.0" />
-    <PackageReference Include="HtmlAgilityPack" Version="1.9.2" />
+    <PackageReference Include="HtmlAgilityPack" Version="1.11.0" />
     <PackageReference Include="Microsoft.Extensions.CommandLineUtils" Version="1.1.1" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="2.2.0" />
     <PackageReference Include="PuppeteerSharp" Version="1.12.1" />
     <PackageReference Include="System.Reactive" Version="4.1.3" />
   </ItemGroup>

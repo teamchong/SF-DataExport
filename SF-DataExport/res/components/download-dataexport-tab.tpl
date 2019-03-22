@@ -47,11 +47,11 @@
 
         <hr />
         <div class="slds-form-element">
-            <button class="slds-button slds-button_success" @click="dispatch('viewDownloadExports', {exportPath,instanceUrl:currentInstanceUrl,userId:userIdAs})">
+            <button class="slds-button slds-button_success" @click="dispatch('ViewDownloadExports', {exportPath,instanceUrl:currentInstanceUrl,userId:userIdAs})">
                 View Page
             </button>
 
-            <button class="slds-button slds-button_success" @click="dispatch('downloadExports', {exportPath,instanceUrl:currentInstanceUrl,exportEmails})">
+            <button class="slds-button slds-button_success" @click="dispatch('DownloadExports', {exportPath,instanceUrl:currentInstanceUrl,exportEmails})">
                 Download Now
             </button>
         </div>

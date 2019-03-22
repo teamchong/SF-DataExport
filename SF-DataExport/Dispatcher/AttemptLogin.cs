@@ -21,13 +21,24 @@ using Unit = System.Reactive.Unit;
 
 namespace SF_DataExport.Dispatcher
 {
-    public class AttemptLogin
+    public class AttemptLogin : IDispatcher
     {
-        public void Dispatch(JToken payload, AppStateManager appState, ResourceManager resource, JsonConfig orgSettings)
+        AppStateManager AppState { get; set; }
+        ResourceManager Resource { get; set; }
+        OrgSettingsConfig OrgSettings { get; set; }
+
+        public AttemptLogin(AppStateManager appState, ResourceManager resource, OrgSettingsConfig orgSettings)
         {
-            appState.Commit(new JObject { ["isLoading"] = true });
-            Observable.FromAsync(async () =>
+            AppState = appState;
+            Resource = resource;
+            OrgSettings = orgSettings;
+        }
+
+        public async Task<JToken> DispatchAsync(JToken payload)
+        {
+            try
             {
+                AppState.Commit(new JObject { ["isLoading"] = true });
                 var attemptingDomain = Regex.Replace((string)payload ?? "", "^https?://", "");
 
                 if (!string.IsNullOrEmpty(attemptingDomain))
@@ -37,12 +48,12 @@ namespace SF_DataExport.Dispatcher
                     if (attemptingDomain != "login.salesforce.com" && attemptingDomain != "test.salesforce.com")
                     {
                         var instanceUrl = "https://" + attemptingDomain;
-                        var savedOrg = orgSettings.Get(o => o[instanceUrl]);
+                        var savedOrg = OrgSettings.Get(o => o[instanceUrl]);
                         if (savedOrg != null)
                         {
                             var accessToken = (string)savedOrg[OAuth.ACCESS_TOKEN] ?? "";
                             var refreshToken = (string)savedOrg[OAuth.REFRESH_TOKEN] ?? "";
-                            loginUrl = resource.GetLoginUrl(savedOrg[OAuth.ID]);
+                            loginUrl = Resource.GetLoginUrl(savedOrg[OAuth.ID]);
                             if (!Uri.IsWellFormedUriString(loginUrl, UriKind.Absolute))
                             {
                                 loginUrl = "https://login.salesforce.com";
@@ -51,20 +62,20 @@ namespace SF_DataExport.Dispatcher
 
                             try
                             {
-                                await client.TokenRefreshAsync(new Uri(loginUrl), resource.GetClientIdByLoginUrl(loginUrl)).GoOn();
-                                await appState.SetOrganizationAsync(
+                                await client.TokenRefreshAsync(new Uri(loginUrl), Resource.GetClientIdByLoginUrl(loginUrl)).GoOn();
+                                await AppState.SetOrganizationAsync(
                                     client.AccessToken,
                                     client.InstanceUrl,
                                     client.Id,
                                     client.RefreshToken).GoOn();
-                                appState.SetCurrentInstanceUrl(client);
-                                resource.ResetCookie();
-                                await resource.GetCookieAsync(client.InstanceUrl, client.AccessToken).GoOn();
-                                return;
+                                AppState.SetCurrentInstanceUrl(client);
+                                Resource.ResetCookie();
+                                await Resource.GetCookieAsync(client.InstanceUrl, client.AccessToken).GoOn();
+                                return null;
                             }
                             catch (IOException ioEx)
                             {
-                                appState.Commit(new JObject
+                                AppState.Commit(new JObject
                                 {
                                     ["alertMessage"] = ioEx.Message
                                 });
@@ -81,16 +92,18 @@ namespace SF_DataExport.Dispatcher
 
                     var targetUrl = loginUrl + "/services/oauth2/authorize" +
                         "?response_type=token" +
-                        "&client_id=" + HttpUtility.UrlEncode(resource.GetClientIdByLoginUrl(loginUrl)) +
-                        "&redirect_uri=" + HttpUtility.UrlEncode(resource.GetRedirectUrlByLoginUrl(loginUrl)) +
+                        "&client_id=" + HttpUtility.UrlEncode(Resource.GetClientIdByLoginUrl(loginUrl)) +
+                        "&redirect_uri=" + HttpUtility.UrlEncode(Resource.GetRedirectUrlByLoginUrl(loginUrl)) +
                         "&state=" + HttpUtility.UrlEncode(loginUrl) +
                         "&display=popup";
-                    appState.Commit(new JObject { [AppConstants.ACTION_REDIRECT] = targetUrl });
-                    return;
+                    AppState.Commit(new JObject { [AppConstants.ACTION_REDIRECT] = targetUrl });
                 }
-            })
-            .Finally(() => appState.Commit(new JObject { ["isLoading"] = false }))
-            .ScheduleTask();
+            }
+            finally
+            {
+                AppState.Commit(new JObject { ["isLoading"] = false });
+            }
+            return null;
         }
     }
 }

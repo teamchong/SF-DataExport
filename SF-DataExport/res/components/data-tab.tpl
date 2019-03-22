@@ -25,7 +25,8 @@
     </div>
     <div style="padding:1em;position:relative;">
 		<div style="display:inline-block">
-			<button class="slds-button slds-button_neutral" style="display:block" @click="openCSV">Open CSV</button>
+			<p>under construction</p>
+			<!--<button class="slds-button slds-button_neutral" style="display:block" @click="openCSV">Open CSV</button>
 			<section class="slds-popover slds-nubbin_top-left">
 				<button class="slds-button slds-button_icon slds-button_icon-small slds-float_right slds-popover__close" title="Close">
 					<svg class="slds-button__icon">
@@ -35,7 +36,7 @@
 				<div class="slds-popover__body">
 					<p>Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
 				</div>
-			</section>
+			</section>-->
 		</div>
 	</div>
 </div>

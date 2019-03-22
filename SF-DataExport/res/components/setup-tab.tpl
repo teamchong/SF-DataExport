@@ -28,7 +28,7 @@
 		<dir-element v-model="chromePath" label="Chrome path"></dir-element>
         <hr />
         <div class="slds-form-element">
-            <button class="slds-button slds-button_success" @click="dispatch('saveConfig',{orgSettingsPath,chromePath})">Save path</button>
+            <button class="slds-button slds-button_success" @click="dispatch('SaveConfig',{orgSettingsPath,chromePath})">Save path</button>
         </div>
     </div>
 </div>

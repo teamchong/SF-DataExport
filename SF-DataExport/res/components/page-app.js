@@ -32,8 +32,8 @@
         showUserPopover() { return this.$store.state.showUserPopover; },
         cmdLoginAs() {
             const { cmd, popoverUserId } = this.$store.state;
-            const userParam = popoverUserId ? ' -user ' + popoverUserId : '';
-            const pageParam = ' -page "/"';
+            const userParam = popoverUserId ? ' --user ' + popoverUserId : '';
+            const pageParam = ' --page "/"';
             return cmd + ' loginas@' + this.currentOrgName() + userParam + pageParam;
         },
         currentInstanceUrl() { return this.$store.state.currentInstanceUrl; },

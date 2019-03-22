@@ -9,7 +9,7 @@
             if (search) {
                 this.loading = true;
                 this.items = await subscribeDispatch([{
-                    type: 'fetchFilePath', payload: {
+                    type: 'FetchFilePath', payload: {
                         search, field
                     }
                 }]);

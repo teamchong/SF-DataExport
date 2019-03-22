@@ -2,13 +2,14 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Reactive.Linq;
 
 namespace SF_DataExport.Dispatcher
 {
-    public class FetchFilePath
+    public class FetchFilePath : IDispatcher
     {
-        public JToken Dispatch(JToken payload, AppStateManager appState)
+        public Task<JToken> DispatchAsync(JToken payload)
         {
             var search = ((string)payload?["search"])?.Trim() ?? "";
 
@@ -20,9 +21,9 @@ namespace SF_DataExport.Dispatcher
 
                     if (searchDir.Exists)
                     {
-                        return new JArray(searchDir.GetFiles().Select(f => f.FullName)
+                        return Task.FromResult<JToken>(new JArray(searchDir.GetFiles().Select(f => f.FullName)
                             .Concat(searchDir.GetDirectories().Select(d => TrimDir(d.FullName)))
-                            .Where(s => s != "").Distinct());
+                            .Where(s => s != "").Distinct()));
                     }
                     else
                     {
@@ -32,25 +33,25 @@ namespace SF_DataExport.Dispatcher
                         {
                             if (fi.Exists)
                             {
-                                return new JArray(new[] { fi.FullName }
+                                return Task.FromResult<JToken>(new JArray(new[] { fi.FullName }
                                     .Concat(fi.Directory.GetFiles().Where(f => MatchFile(f, fi.Name)).Select(f => f.FullName))
                                     .Concat(fi.Directory.GetDirectories().Where(d => MatchDir(d, fi.Name)).Select(d => TrimDir(d.FullName)))
                                     .Concat(Directory.GetLogicalDrives().Select(d => TrimDir(d)))
-                                    .Where(s => s != "").Distinct());
+                                    .Where(s => s != "").Distinct()));
                             }
                             else
                             {
-                                return new JArray(fi.Directory.GetFiles().Where(f => MatchFile(f, fi.Name)).Select(f => f.FullName)
+                                return Task.FromResult<JToken>(new JArray(fi.Directory.GetFiles().Where(f => MatchFile(f, fi.Name)).Select(f => f.FullName)
                                     .Concat(fi.Directory.GetDirectories().Where(d => MatchDir(d, fi.Name)).Select(d => TrimDir(d.FullName)))
                                     .Concat(Directory.GetLogicalDrives().Select(d => TrimDir(d)))
-                                    .Where(s => s != "").Distinct());
+                                    .Where(s => s != "").Distinct()));
                             }
                         }
                     }
                 }
                 catch { }
             }
-            return new JArray(Directory.GetLogicalDrives().Select(d => TrimDir(d)));
+            return Task.FromResult<JToken>(new JArray(Directory.GetLogicalDrives().Select(d => TrimDir(d))));
 
 
             string TrimDir(string dir)

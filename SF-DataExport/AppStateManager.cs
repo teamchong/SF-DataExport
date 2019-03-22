@@ -1,5 +1,5 @@
-﻿
-using DotNetForce;
+﻿using DotNetForce;
+using Microsoft.Extensions.DependencyInjection;
 using Newtonsoft.Json.Linq;
 using PuppeteerSharp;
 using SF_DataExport.Dispatcher;
@@ -7,6 +7,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reactive;
 using System.Reactive.Concurrency;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
@@ -16,24 +17,24 @@ namespace SF_DataExport
 {
     public class AppStateManager
     {
-        public JsonMergeSettings MergeSettings = new JsonMergeSettings
-        {
-            MergeArrayHandling = MergeArrayHandling.Replace,
-            MergeNullValueHandling = MergeNullValueHandling.Merge,
-            PropertyNameComparison = StringComparison.CurrentCulture,
-        };
-
-        JsonConfig AppSettings { get; set; }
-        JsonConfig OrgSettings { get; set; }
-        ResourceManager Resource { get; set; }
-
-        JObject State { get; set; }
-        Subject<JObject> CommitSubject = new Subject<JObject>();
+        JsonMergeSettings MergeSettings { get; }
+        AppSettingsConfig AppSettings { get; }
+        OrgSettingsConfig OrgSettings { get; }
+        ResourceManager Resource { get; }
+        Dictionary<string, Func<JToken, Task<JToken>>> Dispatchers { get; }
+        JObject State { get; }
+        Subject<JObject> CommitSubject { get; }
 
         public JObject Value { get => State; }
 
-        public AppStateManager(JsonConfig appSettings, JsonConfig orgSettings, ResourceManager resource)
+        public AppStateManager(AppSettingsConfig appSettings, OrgSettingsConfig orgSettings, ResourceManager resource, Dictionary<string, Func<JToken, Task<JToken>>> dispatchers)
         {
+            MergeSettings = new JsonMergeSettings
+            {
+                MergeArrayHandling = MergeArrayHandling.Replace,
+                MergeNullValueHandling = MergeNullValueHandling.Merge,
+                PropertyNameComparison = StringComparison.CurrentCulture,
+            };
             AppSettings = appSettings;
             OrgSettings = orgSettings;
             Resource = resource;
@@ -70,12 +71,16 @@ namespace SF_DataExport
                 ["userRoles"] = new JObject(),
                 ["users"] = new JArray(),
             };
+            CommitSubject = new Subject<JObject>();
             State.Merge(GetOrgSettings(), MergeSettings);
+            Dispatchers = dispatchers;
         }
 
         public async Task<DNFClient> OfflineAccessAsync(string instanceUrl)
         {
-            if (string.IsNullOrEmpty(instanceUrl)) throw new ArgumentException("instanceUrl is empty");
+            if (string.IsNullOrEmpty(instanceUrl))
+                throw new ArgumentException("instanceUrl is empty");
+
             var accessToken = (string)OrgSettings.Get(o => o[instanceUrl]?[OAuth.ACCESS_TOKEN]);
             var refreshToken = (string)OrgSettings.Get(o => o[instanceUrl]?[OAuth.REFRESH_TOKEN]);
             var loginUrl = Resource.GetLoginUrl(OrgSettings.Get(o => o[instanceUrl]?[OAuth.ID]));
@@ -103,10 +108,10 @@ namespace SF_DataExport
                 case AppConstants.COMMAND_DOWNLOAD:
                     await OfflineAccessAsync((string)command["instanceUrl"] ?? "");
                     await Observable.Merge(
-                        Observable.Defer(() =>
+                        Observable.FromAsync(async () =>
                         {
-                            new DownloadExports().Dispatch(command, this, Resource, OrgSettings);
-                            return Observable.Empty<long>();
+                            await Dispatchers[nameof(DownloadExports)](command);
+                            return 0L;
                         }),
                         Observable.Defer(() =>
                         {
@@ -130,16 +135,16 @@ namespace SF_DataExport
                         Console.WriteLine(ex.ToString());
                         return Observable.Return(0L);
                     }))
-                    .Count()
+                    .LastOrDefaultAsync()
                     .SubscribeOn(TaskPoolScheduler.Default);
                     return true;
                 case AppConstants.COMMAND_LOGIN_AS:
                     await OfflineAccessAsync((string)command["instanceUrl"] ?? "");
-                    new LoginAsUser().Dispatch(command, this, Resource, AppSettings, OrgSettings);
+                    await Dispatchers[nameof(LoginAsUser)](command);
                     return true;
                 case AppConstants.COMMAND_LOG_LIMITS:
                     await OfflineAccessAsync((string)command["instanceUrl"] ?? "");
-                    await new GetLimits().DispatchAsync(command, this, Resource, OrgSettings);
+                    await Dispatchers[nameof(GetLimits)](command);
                     return true;
             }
             return false;
@@ -155,59 +160,11 @@ namespace SF_DataExport
                     var type = (string)action["type"];
                     var payload = action["payload"];
 
-                    switch (type)
+                    if (Dispatchers.TryGetValue(type, out var dispatcher))
                     {
-                        case "attemptLogin":
-                            new AttemptLogin().Dispatch(payload, this, Resource, OrgSettings);
-                            break;
-                        case "downloadExports":
-                            new DownloadExports().Dispatch(payload, this, Resource, OrgSettings);
-                            break;
-                        case "fetchDirPath":
-                            return new FetchDirPath().Dispatch(payload, this);
-                        case "fetchFilePath":
-                            return new FetchFilePath().Dispatch(payload, this);
-                        case "loginAsUser":
-                            new LoginAsUser().Dispatch(payload, this, Resource, AppSettings, OrgSettings);
-                            break;
-                        case "removeOfflineAccess":
-                            new RemoveOfflineAccess().Dispatch(payload, this, OrgSettings);
-                            break;
-                        case "removeOrg":
-                            new RemoveOrg().Dispatch(payload, this, Resource, AppSettings, OrgSettings);
-                            break;
-                        case "saveConfig":
-                            new SaveConfig().Dispatch(payload, this, AppSettings, OrgSettings);
-                            break;
-                        case "setOrgSettingsPath":
-                            new SetOrgSettingsPath().Dispatch(payload, this);
-                            break;
-                        case "showLimitsModal":
-                            Commit(new JObject { [type] = payload });
-                            if ((bool)payload == true)
-                            {
-                                await new GetLimits().DispatchAsync(new JObject
-                                {
-                                    ["instanceUrl"] = State["currentInstanceUrl"]
-                                }, this, Resource, OrgSettings).GoOn();
-                            }
-                            break;
-                        case "switchUser":
-                            new SwitchUser().Dispatch(payload, this, Resource, AppSettings, OrgSettings);
-                            break;
-                        case "viewDownloadExports":
-                            new ViewDownloadExports().Dispatch(payload, this, Resource, AppSettings, OrgSettings);
-                            break;
-                        case "viewPage":
-                            new ViewPage().Dispatch((string)payload, this, Resource, AppSettings, OrgSettings);
-                            break;
-                        case "viewUserPage":
-                            new ViewUserPage().Dispatch(payload, this, Resource, AppSettings, OrgSettings);
-                            break;
-                        default:
-                            Commit(new JObject { [type] = payload });
-                            break;
+                        return await dispatcher(payload);
                     }
+                    Commit(new JObject { [type] = payload });
                 }
             }
             return null;
@@ -216,8 +173,8 @@ namespace SF_DataExport
         public async Task SubscribeAsync(Page appPage)
         {
             await appPage.SetRequestInterceptionAsync(true).GoOn();
-            await appPage.SetCacheEnabledAsync(false).GoOn();
-            await appPage.SetBypassCSPAsync(true).GoOn();
+            //await appPage.SetCacheEnabledAsync(false).GoOn();
+            //await appPage.SetBypassCSPAsync(true).GoOn();
             await appPage.ExposeFunctionAsync("subscribeDispatch", async (JArray actions) =>
                 {
                     try
@@ -400,6 +357,7 @@ namespace SF_DataExport
 
                     if ((string)State["currentInstanceUrl"] != client.InstanceUrl)
                         throw new InvalidOperationException();
+
                     Commit(new JObject
                     {
                         ["userProfiles"] = userProfiles,
@@ -440,7 +398,7 @@ namespace SF_DataExport
             string id,
             string refreshToken)
         {
-            await OrgSettings.SaveAysnc(json =>
+            await Observable.FromAsync(() => OrgSettings.SaveAysnc(json =>
             {
                 var settingForSave = new JObject
                 {
@@ -450,7 +408,8 @@ namespace SF_DataExport
                     [OAuth.REFRESH_TOKEN] = refreshToken ?? "",
                 };
                 json[instanceUrl] = settingForSave;
-            }).GoOn();
+            }))
+            .Retry(3);
             Commit(new JObject { ["orgSettings"] = new JArray(OrgSettings.List()) });
         }
 
@@ -462,7 +421,7 @@ namespace SF_DataExport
             }
 
             var newFilePath = Path.Combine(newDirectoryPath, AppConstants.JSON_ORG_SETTINGS);
-
+            
             var oldDirectoryPath = OrgSettings.GetDirectoryPath();
             var oldFilePath = Path.Combine(oldDirectoryPath, AppConstants.JSON_ORG_SETTINGS);
 
@@ -472,7 +431,16 @@ namespace SF_DataExport
                 {
                     var orgData = OrgSettings.Get(d => d);
                     Directory.CreateDirectory(newDirectoryPath);
-                    await File.WriteAllTextAsync(newFilePath, orgData.ToString()).GoOn();
+
+                    var fi = new FileInfo(newFilePath);
+                    using (var stream = fi.Open(FileMode.Create, FileAccess.Write, FileShare.None))
+                    {
+                        using (var writer = new StreamWriter(stream))
+                        {
+                            await writer.WriteAsync(orgData.ToString()).GoOn();
+                        }
+                    }
+
                     try { File.Delete(oldFilePath); } catch { }
                     await AppSettings.SaveAysnc(o => o[AppConstants.PATH_ORG_SETTINGS] = newDirectoryPath).GoOn();
                     OrgSettings.SetPath(newFilePath);
@@ -486,6 +454,23 @@ namespace SF_DataExport
                 }
             }
             return "No change.";
+        }
+
+        public IObservable<Unit> IntercepObservable(Page appPage, Request request, Func<Task> funcAsync)
+        {
+            return Observable.FromAsync(async () =>
+            {
+                await funcAsync().GoOn();
+            })
+            .Catch((Exception ex) => Observable.FromAsync(async () =>
+            {
+#if DEBUG
+                Console.WriteLine(ex.ToString());
+#endif
+                await request.AbortAsync();
+            })
+            .Catch((Exception _) => Observable.Return(Unit.Default)))
+            .SubscribeOn(TaskPoolScheduler.Default);
         }
     }
 }

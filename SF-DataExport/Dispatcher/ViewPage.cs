@@ -21,14 +21,28 @@ using Unit = System.Reactive.Unit;
 
 namespace SF_DataExport.Dispatcher
 {
-    public class ViewPage
+    public class ViewPage : IDispatcher
     {
-        public void Dispatch(string targetUrl, AppStateManager appState, ResourceManager resource, JsonConfig appSettings, JsonConfig orgSettings)
+        AppStateManager AppState { get; }
+        ResourceManager Resource { get; }
+        AppSettingsConfig AppSettings { get; }
+        OrgSettingsConfig OrgSettings { get; }
+
+        public ViewPage(AppStateManager appState, ResourceManager resource, AppSettingsConfig appSettings, OrgSettingsConfig orgSettings)
         {
-            var instanceUrl = (string)appState.Value["currentInstanceUrl"] ?? "";
-            var accessToken = (string)orgSettings.Get(o => o[instanceUrl]?[OAuth.ACCESS_TOKEN]) ?? "";
-            var urlWithAccessCode = resource.GetUrlViaAccessToken(instanceUrl, accessToken, targetUrl);
-            resource.OpenIncognitoBrowser(urlWithAccessCode, appSettings.GetString(AppConstants.PATH_CHROME));
+            AppState = appState;
+            Resource = resource;
+            AppSettings = appSettings;
+            OrgSettings = orgSettings;
+        }
+
+        public Task<JToken> DispatchAsync(JToken payload)
+        {
+            var instanceUrl = (string)AppState.Value["currentInstanceUrl"] ?? "";
+            var accessToken = (string)OrgSettings.Get(o => o[instanceUrl]?[OAuth.ACCESS_TOKEN]) ?? "";
+            var urlWithAccessCode = Resource.GetUrlViaAccessToken(instanceUrl, accessToken, (string)payload);
+            Resource.OpenIncognitoBrowser(urlWithAccessCode, AppSettings.GetString(AppConstants.PATH_CHROME));
+            return Task.FromResult<JToken>(null);
         }
     }
 }

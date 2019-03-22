@@ -21,49 +21,59 @@ using Unit = System.Reactive.Unit;
 
 namespace SF_DataExport.Dispatcher
 {
-    public class RemoveOrg
+    public class RemoveOrg : IDispatcher
     {
-        public void Dispatch(JToken payload, AppStateManager appState, ResourceManager resource, JsonConfig appSettings, JsonConfig orgSettings)
-        {
-            Observable.FromAsync(async () =>
-            {
-                var instanceUrl = (string)payload ?? "";
-                var loginUrl = resource.GetLoginUrl(orgSettings.Get(o => o[instanceUrl][OAuth.ID]));
-                await orgSettings.SaveAysnc(json =>
-                    {
-                        if (json[instanceUrl] != null)
-                        {
-                            json.Remove(instanceUrl);
-                        }
-                    }).GoOn();
-                appState.Commit(appState.GetOrgSettings());
+        AppStateManager AppState { get; }
+        ResourceManager Resource { get; }
+        AppSettingsConfig AppSettings { get; }
+        OrgSettingsConfig OrgSettings { get; }
 
-                if ((string)appState.Value["currentInstanceUrl"] == instanceUrl)
+        public RemoveOrg(AppStateManager appState, ResourceManager resource, AppSettingsConfig appSettings, OrgSettingsConfig orgSettings)
+        {
+            AppState = appState;
+            Resource = resource;
+            AppSettings = appSettings;
+            OrgSettings = orgSettings;
+        }
+
+        public async Task<JToken> DispatchAsync(JToken payload)
+        {
+            var instanceUrl = (string)payload ?? "";
+            var loginUrl = Resource.GetLoginUrl(OrgSettings.Get(o => o[instanceUrl][OAuth.ID]));
+            await OrgSettings.SaveAysnc(json =>
                 {
-                    appState.Commit(new JObject
+                    if (json[instanceUrl] != null)
                     {
-                        ["currentInstanceUrl"] = "",
-                        ["objects"] = new JArray(),
-                        ["orgLimits"] = new JArray(),
-                        ["orgLimitsLog"] = new JArray(),
-                        ["popoverUserId"] = "",
-                        ["showLimitsModal"] = false,
-                        ["showOrgModal"] = true,
-                        ["showPhotosModal"] = false,
-                        ["toolingObjects"] = new JArray(),
-                        ["userId"] = "",
-                        ["userIdAs"] = "",
-                        ["userProfiles"] = new JArray(),
-                        ["userRoles"] = new JObject(),
-                        ["users"] = new JArray(),
-                    });
-                }
-                var oauthPage = instanceUrl +
-                    "/identity/app/connectedAppsUserList.apexp?app_name=SFDataExport&consumer_key=" +
-                    HttpUtility.UrlEncode(resource.GetClientIdByLoginUrl(loginUrl));
-                resource.OpenIncognitoBrowser(oauthPage, appSettings.GetString(AppConstants.PATH_CHROME));
-            })
-            .ScheduleTask();
+                        json.Remove(instanceUrl);
+                    }
+                }).GoOn();
+            AppState.Commit(AppState.GetOrgSettings());
+
+            if ((string)AppState.Value["currentInstanceUrl"] == instanceUrl)
+            {
+                AppState.Commit(new JObject
+                {
+                    ["currentInstanceUrl"] = "",
+                    ["objects"] = new JArray(),
+                    ["orgLimits"] = new JArray(),
+                    ["orgLimitsLog"] = new JArray(),
+                    ["popoverUserId"] = "",
+                    ["showLimitsModal"] = false,
+                    ["showOrgModal"] = true,
+                    ["showPhotosModal"] = false,
+                    ["toolingObjects"] = new JArray(),
+                    ["userId"] = "",
+                    ["userIdAs"] = "",
+                    ["userProfiles"] = new JArray(),
+                    ["userRoles"] = new JObject(),
+                    ["users"] = new JArray(),
+                });
+            }
+            var oauthPage = instanceUrl +
+                "/identity/app/connectedAppsUserList.apexp?app_name=SFDataExport&consumer_key=" +
+                HttpUtility.UrlEncode(Resource.GetClientIdByLoginUrl(loginUrl));
+            Resource.OpenIncognitoBrowser(oauthPage, AppSettings.GetString(AppConstants.PATH_CHROME));
+            return null;
         }
     }
 }

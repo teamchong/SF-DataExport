@@ -4,8 +4,8 @@
         cmdExport() {
             const { cmd } = this.$store.state;
             const { exportEmails, exportPath } = this;
-            const exportEmailsParam = exportEmails ? " -email \"" + exportEmails + "\"" : "";
-            const exportPathParam = exportPath ? " -path \"" + exportPath + "\"" : "";
+            const exportEmailsParam = exportEmails ? " --email \"" + exportEmails + "\"" : "";
+            const exportPathParam = exportPath ? " --path \"" + exportPath + "\"" : "";
             return cmd + ' download@' + this.currentOrgName() + exportEmailsParam + exportPathParam;
         },
         currentInstanceUrl() { return this.$store.state.currentInstanceUrl; },

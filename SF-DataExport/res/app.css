@@ -17,8 +17,27 @@
 #chart-container .node {
     cursor: pointer;
     position: relative;
+    overflow: visible;
 }
 
+    #chart-container .node .title {
+        font-size: 11px !important;
+        line-height: 13px !important;
+        background: #006994;
+        font-weight: bold;
+        width: 100%;
+        transform: rotate(-90deg) rotateY(180deg);
+        transform-origin: left top;
+        position: absolute;
+    }
+
+    #chart-container .node .content {
+        width: auto;
+        overflow: visible;
+        transform: rotate(-90deg) rotateY(180deg);
+        transform-origin: left top;
+        margin-left: 20px;
+    }
 
     #chart-container .node:hover .content {
         overflow: visible;
@@ -45,7 +64,7 @@
         display: block;
     }
 
-    #chart-container .node .content .users .slds-truncate {
+    #chart-container .node .content .users .node-content {
         display: block;
         font-size: 10px;
         min-width: 100px;
@@ -55,13 +74,6 @@
         background-size: 50px 50px;
         padding-left: 55px;
         padding-right: 5px;
-    }
-
-    #chart-container .node .title {
-        font-size: 11px !important;
-        line-height: 13px !important;
-        background: #006994;
-        font-weight: bold;
     }
 
 #user-photos-div {
@@ -102,6 +114,7 @@
 .slds-modal__container {
     padding-bottom: 1vh;
 }
+
 .slds-modal__footer:empty {
     display: none;
 }

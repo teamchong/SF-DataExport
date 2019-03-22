@@ -21,21 +21,33 @@ using Unit = System.Reactive.Unit;
 
 namespace SF_DataExport.Dispatcher
 {
-    public class SwitchUser
+    public class SwitchUser : IDispatcher
     {
-        public void Dispatch(JToken payload, AppStateManager appState, ResourceManager resource, JsonConfig appSettings, JsonConfig orgSettings)
+        AppStateManager AppState { get; }
+        ResourceManager Resource { get; }
+        OrgSettingsConfig OrgSettings { get; }
+
+        public SwitchUser(AppStateManager appState, ResourceManager resource, OrgSettingsConfig orgSettings)
         {
-            appState.Commit(new JObject { ["isLoading"] = true });
-            Observable.FromAsync(async () =>
+            AppState = AppState;
+            Resource = resource;
+            OrgSettings = orgSettings;
+        }
+
+        public async Task<JToken> DispatchAsync(JToken payload)
+        {
+            try
             {
+                AppState.Commit(new JObject { ["isLoading"] = true });
+
                 var instanceUrl = (string)payload?["instanceUrl"] ?? "";
                 var userId = (string)payload?["userId"] ?? "";
-                var accessToken = (string)orgSettings.Get(o => o[instanceUrl]?[OAuth.ACCESS_TOKEN]) ?? "";
-                var refreshToken = (string)orgSettings.Get(o => o[instanceUrl]?[OAuth.REFRESH_TOKEN]) ?? "";
-                var id = (string)orgSettings.Get(o => o[instanceUrl]?[OAuth.ID]) ?? "";
-                var targetUrl = resource.GetLoginUrlAs(instanceUrl, id, userId, "/");
+                var accessToken = (string)OrgSettings.Get(o => o[instanceUrl]?[OAuth.ACCESS_TOKEN]) ?? "";
+                var refreshToken = (string)OrgSettings.Get(o => o[instanceUrl]?[OAuth.REFRESH_TOKEN]) ?? "";
+                var id = (string)OrgSettings.Get(o => o[instanceUrl]?[OAuth.ID]) ?? "";
+                var targetUrl = Resource.GetLoginUrlAs(instanceUrl, id, userId, "/");
 
-                await resource.RunClientAsUserAsync((httpClient, cookieContainer, htmlContent) =>
+                await Resource.RunClientAsUserAsync((httpClient, cookieContainer, htmlContent) =>
                 {
                     var cookies = cookieContainer.GetCookies(new Uri(instanceUrl));
                     var newAccessToken = cookies["sid"]?.Value ?? "";
@@ -43,7 +55,7 @@ namespace SF_DataExport.Dispatcher
 
                     {
                         var newId = id.Remove(id.LastIndexOf('/') + 1) + userId;
-                        appState.Commit(new JObject
+                        AppState.Commit(new JObject
                         {
                             ["currentAccessToken"] = newAccessToken,
                             ["currentId"] = newId,
@@ -52,9 +64,12 @@ namespace SF_DataExport.Dispatcher
                     }
                     return Task.FromResult(0);
                 }, instanceUrl, accessToken, targetUrl, id, userId).GoOn();
-            })
-            .Finally(() => appState.Commit(new JObject { ["isLoading"] = false }))
-            .ScheduleTask();
+            }
+            finally
+            {
+                AppState.Commit(new JObject { ["isLoading"] = false });
+            }
+            return null;
         }
     }
 }

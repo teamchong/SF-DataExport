@@ -17,7 +17,7 @@
         </div>
         <div class="slds-global-header__item">
             <h1 v-if="currentInstanceUrl">
-                <a href="javascript:void(0)" @click="dispatch('viewPage',currentInstanceUrl)">
+                <a href="javascript:void(0)" @click="dispatch('ViewPage',currentInstanceUrl)">
                     {{currentInstanceUrl|orgname}}
                 </a>
             </h1>
@@ -35,9 +35,9 @@
                     <div>Label: {{objectLabel}}</div>
                     <div>Name: {{objectName}}</div>
                     <div v-if="objectType=='data'&&objectPrefix">Prefix: {{objectPrefix}}</div>
-                    <div v-if="objectType=='data'&&objectOverviewPage"><a href="javascript:void(0)" @click="dispatch('viewPage',objectOverviewPage)">Overview page</a></div>
-                    <div v-if="objectType=='data'&&objectListPage"><a href="javascript:void(0)" @click="dispatch('viewPage',objectListPage)">List page</a></div>
-                    <div v-if="objectType=='data'&&objectSetupPage"><a href="javascript:void(0)" @click="dispatch('viewPage',objectSetupPage)">Setup page</a></div>
+                    <div v-if="objectType=='data'&&objectOverviewPage"><a href="javascript:void(0)" @click="dispatch('ViewPage',objectOverviewPage)">Overview page</a></div>
+                    <div v-if="objectType=='data'&&objectListPage"><a href="javascript:void(0)" @click="dispatch('ViewPage',objectListPage)">List page</a></div>
+                    <div v-if="objectType=='data'&&objectSetupPage"><a href="javascript:void(0)" @click="dispatch('ViewPage',objectSetupPage)">Setup page</a></div>
                 </div>
             </section>
             <v-autocomplete v-model="globalSearch" :items="globalSearchItems" dense :filter="globalSearchFilter"

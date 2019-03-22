@@ -21,16 +21,28 @@ using Unit = System.Reactive.Unit;
 
 namespace SF_DataExport.Dispatcher
 {
-    public class ViewUserPage
+    public class ViewUserPage : IDispatcher
     {
-        public void Dispatch(JToken payload, AppStateManager appState, ResourceManager resource, JsonConfig appSettings, JsonConfig orgSettings)
+        ResourceManager Resource { get; }
+        AppSettingsConfig AppSettings { get; }
+        OrgSettingsConfig OrgSettings { get; }
+
+        public ViewUserPage(ResourceManager resource, AppSettingsConfig appSettings, OrgSettingsConfig orgSettings)
+        {
+            Resource = resource;
+            AppSettings = appSettings;
+            OrgSettings = orgSettings;
+        }
+
+        public Task<JToken> DispatchAsync(JToken payload)
         {
             var instanceUrl = (string)payload["instanceUrl"] ?? "";
             var userId = (string)payload["userId"] ?? "";
-            var accessToken = (string)orgSettings.Get(o => o[instanceUrl]?[OAuth.ACCESS_TOKEN]) ?? "";
+            var accessToken = (string)OrgSettings.Get(o => o[instanceUrl]?[OAuth.ACCESS_TOKEN]) ?? "";
             var targetUrl = instanceUrl + "/" + userId + "?noredirect=1";
-            var urlWithAccessCode = resource.GetUrlViaAccessToken(instanceUrl, accessToken, targetUrl);
-            resource.OpenIncognitoBrowser(urlWithAccessCode, appSettings.GetString(AppConstants.PATH_CHROME));
+            var urlWithAccessCode = Resource.GetUrlViaAccessToken(instanceUrl, accessToken, targetUrl);
+            Resource.OpenIncognitoBrowser(urlWithAccessCode, AppSettings.GetString(AppConstants.PATH_CHROME));
+            return Task.FromResult<JToken>(null);
         }
     }
 }

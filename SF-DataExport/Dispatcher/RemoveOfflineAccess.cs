@@ -21,27 +21,33 @@ using Unit = System.Reactive.Unit;
 
 namespace SF_DataExport.Dispatcher
 {
-    public class RemoveOfflineAccess
+    public class RemoveOfflineAccess : IDispatcher
     {
-        public void Dispatch(JToken payload, AppStateManager appState, JsonConfig orgSettings)
+        AppStateManager AppState { get; }
+        JsonConfig OrgSettings { get; }
+
+        public RemoveOfflineAccess(AppStateManager appState, JsonConfig orgSettings)
         {
-            Observable.FromAsync(async () =>
+            AppState = AppState;
+            OrgSettings = orgSettings;
+        }
+
+        public async Task<JToken> DispatchAsync(JToken payload)
+        {
+            var instanceUrl = (string)payload ?? "";
+            await OrgSettings.SaveAysnc(json =>
             {
-                var instanceUrl = (string)payload ?? "";
-                await orgSettings.SaveAysnc(json =>
+                if (json[instanceUrl] != null)
                 {
-                    if (json[instanceUrl] != null)
-                    {
-                        json[instanceUrl][OAuth.REFRESH_TOKEN] = "";
-                    }
-                }).GoOn();
-                appState.Commit(new JObject
-                {
-                    ["orgOfflineAccess"] = new JArray(orgSettings.List()
-                    .Where(org => !string.IsNullOrEmpty((string)orgSettings.Get(o => o[org]?[OAuth.REFRESH_TOKEN]))))
-                });
-            })
-            .ScheduleTask();
+                    json[instanceUrl][OAuth.REFRESH_TOKEN] = "";
+                }
+            }).GoOn();
+            AppState.Commit(new JObject
+            {
+                ["orgOfflineAccess"] = new JArray(OrgSettings.List()
+                .Where(org => !string.IsNullOrEmpty((string)OrgSettings.Get(o => o[org]?[OAuth.REFRESH_TOKEN]))))
+            });
+            return null;
         }
     }
 }

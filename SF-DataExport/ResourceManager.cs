@@ -20,12 +20,12 @@ namespace SF_DataExport
 {
     public class ResourceManager
     {
-        public string CONTENT_HTML_START { get; protected set; }
+        public string CONTENT_HTML_START { get; }
 
-        public string CONTENT_HTML_END { get; protected set; }
+        public string CONTENT_HTML_END { get; }
 
-        SemaphoreSlim Throttler { get; set; }
-        BehaviorSubject<(DateTime cacheTime, CookieContainer cookies, string instanceUrl, string accessToken)> LatestSession { get; set; }
+        SemaphoreSlim Throttler { get; }
+        BehaviorSubject<(DateTime cacheTime, CookieContainer cookies, string instanceUrl, string accessToken)> LatestSession { get; }
 
         public ResourceManager()
         {
@@ -40,7 +40,6 @@ namespace SF_DataExport
 <link rel='stylesheet' type='text/css' href='/slds.css'/>
 <link rel='stylesheet' type='text/css' href='/orgchart.css'/>
 <link rel='stylesheet' type='text/css' href='/font-awesome.css'/>
-<link rel='stylesheet' type='text/css' href='/handsontable.css'/>
 <link rel='stylesheet' type='text/css' href='/app.css'/>
 </head>
 <body>
@@ -117,7 +116,16 @@ namespace SF_DataExport
                     using (var httpClient = new HttpClient(handler))
                     {
                         var htmlContent = await GetLoginWaitForRedirect(httpClient, newInstanceUrl, urlWithAccessCode, targetUrl).GoOn();
-                        if (!htmlContent.Contains(newInstanceUrl)) throw new UnauthorizedAccessException();
+                        var re = new Regex(@"location\.replace\(['""]([^'""]+)['""]\)");
+                        var result = re.Match(htmlContent);
+                        while (!string.IsNullOrEmpty(result?.Groups[1].Value))
+                        {
+                            htmlContent = await httpClient.GetStringAsync(newInstanceUrl + result?.Groups[1].Value).GoOn();
+                            result = re.Match(htmlContent);
+                        }
+                        var newCookies = cookieContainer.GetCookies(new Uri(newInstanceUrl));
+                        var sid = newCookies["sid"]?.Value ?? "";
+                        if (string.IsNullOrEmpty(sid)) throw new UnauthorizedAccessException();
                         LatestSession.OnNext((DateTime.Now, cookieContainer, newInstanceUrl, newAccessToken));
                         return cookieContainer;
                     }
@@ -463,6 +471,15 @@ namespace SF_DataExport
             // show a single decimal place, and no space.
             var result = String.Format("{0:0.##} {1}", fileSize, sizes[order]);
             return result;
+        }
+
+        public (string orgPath, string orgPathInConfig, string orgPathSave) GetOrgPath(AppSettingsConfig appSettings)
+        {
+            var orgPathInConfig = appSettings.GetString(AppConstants.PATH_ORG_SETTINGS);
+            var orgPath = (orgPathInConfig != "" ? orgPathInConfig : null)
+                ?? DefaultDirectory;
+            var orgPathSave = orgPath != DefaultDirectory ? orgPath : "";
+            return (orgPath, orgPathInConfig, orgPathSave);
         }
     }
 }
