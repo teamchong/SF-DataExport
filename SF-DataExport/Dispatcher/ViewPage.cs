@@ -38,7 +38,7 @@ namespace SF_DataExport.Dispatcher
 
         public Task<JToken> DispatchAsync(JToken payload)
         {
-            var instanceUrl = (string)AppState.Value["currentInstanceUrl"] ?? "";
+            var instanceUrl = (string)AppState.GetState("currentInstanceUrl") ?? "";
             var accessToken = (string)OrgSettings.Get(o => o[instanceUrl]?[OAuth.ACCESS_TOKEN]) ?? "";
             var urlWithAccessCode = Resource.GetUrlViaAccessToken(instanceUrl, accessToken, (string)payload);
             Resource.OpenIncognitoBrowser(urlWithAccessCode, AppSettings.GetString(AppConstants.PATH_CHROME));

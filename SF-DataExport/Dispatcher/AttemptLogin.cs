@@ -38,10 +38,11 @@ namespace SF_DataExport.Dispatcher
         {
             try
             {
+                Resource.ResetCookie();
                 AppState.Commit(new JObject { ["isLoading"] = true });
                 var attemptingDomain = Regex.Replace((string)payload ?? "", "^https?://", "");
 
-                if (!string.IsNullOrEmpty(attemptingDomain))
+                if (attemptingDomain?.Length > 0)
                 {
                     var loginUrl = "https://" + attemptingDomain;
 
@@ -68,8 +69,7 @@ namespace SF_DataExport.Dispatcher
                                     client.InstanceUrl,
                                     client.Id,
                                     client.RefreshToken).GoOn();
-                                AppState.SetCurrentInstanceUrl(client);
-                                Resource.ResetCookie();
+                                await AppState.SetCurrentInstanceUrlAync(client).GoOn();
                                 await Resource.GetCookieAsync(client.InstanceUrl, client.AccessToken).GoOn();
                                 return null;
                             }

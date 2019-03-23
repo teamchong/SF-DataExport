@@ -31,10 +31,10 @@
         tab() { return this.$store.state.tab; },
         showUserPopover() { return this.$store.state.showUserPopover; },
         cmdLoginAs() {
-            const { cmd, popoverUserId } = this.$store.state;
+            const { cmd, currentInstanceUrl, popoverUserId } = this.$store.state;
             const userParam = popoverUserId ? ' --user ' + popoverUserId : '';
             const pageParam = ' --page "/"';
-            return cmd + ' loginas@' + this.currentOrgName() + userParam + pageParam;
+            return cmd + ' loginas@' + this.$options.filters.orglabel(currentInstanceUrl) + userParam + pageParam;
         },
         currentInstanceUrl() { return this.$store.state.currentInstanceUrl; },
         popoverUserId() {

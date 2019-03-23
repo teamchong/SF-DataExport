@@ -73,10 +73,19 @@ namespace SF_DataExport
             return SaveAysnc(obj => obj);
         }
 
-        public Task SaveAysnc(Action<JObject> setter)
+        public async Task SaveAysnc(Action<JObject> setter)
         {
-            setter(Data);
-            return SaveAysnc();
+            await Throttler.WaitAsync().GoOn();
+
+            try
+            {
+                setter(Data);
+            }
+            finally
+            {
+                Throttler.Release();
+            }
+            await SaveAysnc();
         }
 
         public async Task SaveAysnc(Func<JObject, JObject> setter)

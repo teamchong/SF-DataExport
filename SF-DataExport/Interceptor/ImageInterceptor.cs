@@ -23,15 +23,16 @@ namespace SF_DataExport.Interceptor
             {
                 var imgPath = "images/" + request.Url.Split(".salesforce.com/assets/images/", 2).Last().Split('?').First();
                 var img = Resource.GetResourceBytes(imgPath);
-                if (img != null)
-                    await AppState.IntercepObservable(appPage, request, () => request.RespondAsync(new ResponseData
+                if (img?.LongLength > 0)
+                    await AppState.InterceptAsync(appPage, request, req => req.RespondAsync(new ResponseData
                     {
                         Status = HttpStatusCode.OK,
                         ContentType = Resource.GetContentType(imgPath),
                         BodyData = img
-                    }));
+                    })).GoOn();
                 else
-                    await AppState.IntercepObservable(appPage, request, () => request.ContinueAsync());
+                    await AppState.InterceptAsync(appPage, request, req => req.ContinueAsync()).GoOn();
+
                 return true;
             }
             return false;

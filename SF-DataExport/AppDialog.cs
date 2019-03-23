@@ -1,5 +1,4 @@
-﻿using Microsoft.Extensions.DependencyInjection;
-using DotNetForce;
+﻿using DotNetForce;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using PuppeteerSharp;
@@ -8,7 +7,8 @@ using SF_DataExport.Interceptor;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reactive.Concurrency;
+using System.Reactive;
+using System.Reactive.Threading.Tasks;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using System.Threading.Tasks;
@@ -22,9 +22,9 @@ namespace SF_DataExport
         string ChromePath { get; }
         JObject Command { get; }
         AppStateManager AppState { get; }
-        List<InterceptorBase> Interceptors { get; }
+        IObservable<InterceptorBase> Interceptors { get; }
 
-        public AppDialog(string chromePath, JObject command, AppStateManager appState, List<InterceptorBase> interceptors)
+        public AppDialog(string chromePath, JObject command, AppStateManager appState, IObservable<InterceptorBase> interceptors)
         {
             ChromePath = chromePath;
             Command = command;
@@ -40,17 +40,62 @@ namespace SF_DataExport
             try
             {
                 var isClose = new Subject<bool>();
-                browser.Closed += (object sender, EventArgs e) => isClose.OnCompleted();
+                Observable.FromEventPattern(h => browser.Closed += h, h => browser.Closed -= h)
+                    .Take(1)
+                    .Subscribe(evt => isClose.OnCompleted());
+
                 var appPage = (await browser.PagesAsync().GoOn()).FirstOrDefault();
 
-                appPage.Error += Page_Error;
-                appPage.PageError += Page_PageError;
-                appPage.Console += Page_Console;
-                appPage.Response += Page_Response;
-                appPage.Request += Page_Request;
-                appPage.RequestFinished += Page_RequestFinished;
-                appPage.RequestFailed += Page_RequestFailed;
-                appPage.DOMContentLoaded += Page_DOMContentLoaded;
+                Observable.FromEventPattern<ErrorEventArgs>(h => appPage.Error += h, h => appPage.Error -= h)
+                    .SelectMany((EventPattern<ErrorEventArgs> evt) => 
+                        Interceptors.Select(interceptor => interceptor.ErrorAsync((Page)evt.Sender, evt.EventArgs.Error))
+                        .SelectMany(task => task != null ? Observable.FromAsync(() => task).SuppressErrors() : Observable.Empty<Unit>())
+                    )
+                    .Subscribe();
+                Observable.FromEventPattern<PageErrorEventArgs>(h => appPage.PageError += h, h => appPage.PageError -= h)
+                    .SelectMany((EventPattern<PageErrorEventArgs> evt) => 
+                        Interceptors.Select(interceptor => interceptor.PageErrorAsync((Page)evt.Sender, evt.EventArgs.Message))
+                        .SelectMany(task => task != null ? Observable.FromAsync(() => task).SuppressErrors() : Observable.Empty<Unit>())
+                    )
+                    .Subscribe();
+                Observable.FromEventPattern<ResponseCreatedEventArgs>(h => appPage.Response += h, h => appPage.Response -= h)
+                    .SelectMany((EventPattern<ResponseCreatedEventArgs> evt) =>
+                        Interceptors.Select(interceptor => interceptor.ResponseAsync((Page)evt.Sender, evt.EventArgs.Response))
+                        .SelectMany(task => task != null ? Observable.FromAsync(() => task).SuppressErrors() : Observable.Empty<Unit>())
+                    )
+                    .Subscribe();
+                Observable.FromEventPattern<RequestEventArgs>(h => appPage.Request += h, h => appPage.Request -= h)
+                    .SelectMany((EventPattern<RequestEventArgs> evt) => 
+                        Interceptors.Select(interceptor => interceptor.RequestAsync((Page)evt.Sender, evt.EventArgs.Request))
+                        .SelectMany(task => task != null ? Observable.FromAsync(() => task).SuppressErrors() : Observable.Return(false))
+                        .Count(intercepted => intercepted)
+                        .Where(interceptedCount => interceptedCount <= 0)
+                        .SelectMany(_interceptedCount => Observable.FromAsync(() => evt.EventArgs.Request.ContinueAsync()))
+                    )
+                    .Subscribe();
+                Observable.FromEventPattern<RequestEventArgs>(h => appPage.RequestFinished += h, h => appPage.RequestFinished -= h)
+                    .SelectMany((EventPattern<RequestEventArgs> evt) => 
+                        Interceptors.Select(interceptor => interceptor.RequestFinishedAsync((Page)evt.Sender, evt.EventArgs.Request))
+                        .SelectMany(task => task != null ? Observable.FromAsync(() => task).SuppressErrors() : Observable.Empty<Unit>())
+                    )
+                    .Subscribe();
+                Observable.FromEventPattern<RequestEventArgs>(h => appPage.RequestFailed += h, h => appPage.RequestFailed -= h)
+                    .SelectMany((EventPattern<RequestEventArgs> evt) => 
+                        Interceptors.Select(interceptor => interceptor.RequestFailedAsync((Page)evt.Sender, evt.EventArgs.Request))
+                        .SelectMany(task => task != null ? Observable.FromAsync(() => task).SuppressErrors() : Observable.Empty<Unit>())
+                    )
+                    .Subscribe();
+                Observable.FromEventPattern(h => appPage.DOMContentLoaded += h, h => appPage.DOMContentLoaded -= h)
+                    .SelectMany((EventPattern<object> evt) => 
+                        Interceptors.Select(interceptor => interceptor.DOMContentLoadedAsync((Page)evt.Sender))
+                        .SelectMany(task => task != null ? Observable.FromAsync(() => task).SuppressErrors() : Observable.Empty<Unit>())
+                    )
+                    .Subscribe();
+#if DEBUG
+                Observable.FromEventPattern<ConsoleEventArgs>(h => appPage.Console += h, h => appPage.Console -= h)
+                    .SelectMany(evt => Observable.FromAsync(() => LogPageConsoleAsync(evt.EventArgs)).SuppressErrors())
+                    .Subscribe();
+#endif
 
                 await AppState.SubscribeAsync(appPage).GoOn();
                 AppState.Commit(new JObject { [AppConstants.ACTION_REDIRECT] = OAuth.REDIRECT_URI });
@@ -58,7 +103,7 @@ namespace SF_DataExport
                 {
                     await AppState.DispatchActionsAsync(appPage, new JArray(Command));
                 }
-                await isClose.LastOrDefaultAsync().SubscribeOn(TaskPoolScheduler.Default);
+                await isClose.LastOrDefaultAsync().ToTask().GoOn();
             }
             catch (Exception ex)
             {
@@ -107,215 +152,33 @@ namespace SF_DataExport
             return launchOpts;
         }
 
-        async void Page_Error(object sender, ErrorEventArgs e)
+#if DEBUG
+        async Task LogPageConsoleAsync(ConsoleEventArgs evt)
         {
-            try
+            var messages = new List<string>();
+            if (evt.Message.Args != null)
             {
-                var appPage = sender as Page;
-                if (appPage != null)
+                foreach (var arg in evt.Message.Args)
                 {
-                    foreach (var interceptor in Interceptors)
+                    var message = (string)(await arg.GetPropertyAsync("message").GoOn())?.RemoteObject?.Value;
+                    if (!string.IsNullOrEmpty(message))
                     {
-                        var func = interceptor.ErrorAsync(appPage, e.Error);
-
-                        if (func != null && await func.GoOn())
-                        {
-                            return;
-                        }
+                        messages.Add(message);
                     }
-
-                    Console.WriteLine("Error: " + e.Error);
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine(ex.ToString());
-            }
-        }
-
-        async void Page_PageError(object sender, PageErrorEventArgs e)
-        {
-            try
-            {
-                var appPage = sender as Page;
-                if (appPage != null)
-                {
-                    foreach (var interceptor in Interceptors)
+                    else
                     {
-                        var func = interceptor.PageErrorAsync(appPage, e.Message);
-
-                        if (func != null && await func.GoOn())
-                        {
-                            return;
-                        }
-                    }
-
-                    Console.WriteLine("PageError: " + e.Message);
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine(ex.ToString());
-            }
-        }
-
-        async void Page_Console(object sender, ConsoleEventArgs e)
-        {
-            try
-            {
-                var messages = new List<string>();
-                if (e.Message.Args != null)
-                {
-                    foreach (var arg in e.Message.Args)
-                    {
-                        var message = (string)(await arg.GetPropertyAsync("message").GoOn())?.RemoteObject?.Value;
-                        if (!string.IsNullOrEmpty(message))
-                        {
-                            messages.Add(message);
-                        }
-                        else
-                        {
-                            var json = await arg.JsonValueAsync().GoOn();
-                            messages.Add(JsonConvert.SerializeObject(json, Formatting.Indented));
-                        }
-                    }
-                }
-                Console.WriteLine(
-                    "Console:" + e.Message.Type.ToString() + "\n" +
-                    "URL: " + e.Message.Location.URL + "\n" +
-                    "Line: " + e.Message.Location.LineNumber + "\n" +
-                    "Column: " + e.Message.Location.ColumnNumber + "\n" +
-                    (messages.Count > 0 ? string.Join(Environment.NewLine, messages) : ""));
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine(ex.ToString());
-            }
-        }
-
-        async void Page_Response(object sender, ResponseCreatedEventArgs e)
-        {
-            try
-            {
-                var appPage = sender as Page;
-                if (appPage != null)
-                {
-                    foreach (var interceptor in Interceptors)
-                    {
-                        var func = interceptor.ResponseAsync(appPage, e.Response);
-
-                        if (func != null && await func.GoOn())
-                        {
-                            return;
-                        }
-                    }
-
-                    //Console.WriteLine("Response: " + e.Response?.Url);
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine(ex.ToString());
-            }
-        }
-
-        async void Page_Request(object sender, RequestEventArgs e)
-        {
-            try
-            {
-                var appPage = sender as Page;
-                if (appPage != null)
-                {
-                    foreach (var interceptor in Interceptors)
-                    {
-                        var func = interceptor.RequestAsync(appPage, e.Request);
-
-                        if (func != null && await func.GoOn())
-                        {
-                            return;
-                        }
-                    }
-
-                    await AppState.IntercepObservable(appPage, e.Request, () => e.Request.ContinueAsync());
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine(ex.ToString());
-            }
-        }
-
-        async void Page_RequestFinished(object sender, RequestEventArgs evt)
-        {
-            try
-            {
-                var appPage = sender as Page;
-                if (appPage != null)
-                {
-                    foreach (var interceptor in Interceptors)
-                    {
-                        var func = interceptor.RequestFinishedAsync(appPage, evt.Request);
-
-                        if (func != null && await func.GoOn())
-                        {
-                            return;
-                        }
+                        var json = await arg.JsonValueAsync().GoOn();
+                        messages.Add(JsonConvert.SerializeObject(json, Formatting.Indented));
                     }
                 }
             }
-            catch (Exception ex)
-            {
-                Console.WriteLine(ex.ToString());
-            }
+            Console.WriteLine(
+                "Console:" + evt.Message.Type.ToString() + "\n" +
+                "URL: " + evt.Message.Location.URL + "\n" +
+                "Line: " + evt.Message.Location.LineNumber + "\n" +
+                "Column: " + evt.Message.Location.ColumnNumber + "\n" +
+                (messages.Count > 0 ? string.Join(Environment.NewLine, messages) : ""));
         }
-
-        async void Page_RequestFailed(object sender, RequestEventArgs evt)
-        {
-            try
-            {
-                var appPage = sender as Page;
-                if (appPage != null)
-                {
-                    foreach (var interceptor in Interceptors)
-                    {
-                        var func = interceptor.RequestFailedAsync(appPage, evt.Request);
-
-                        if (func != null && await func.GoOn())
-                        {
-                            return;
-                        }
-                    }
-                    Console.WriteLine("RequestFailed: " + evt.Request.Url);
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine(ex.ToString());
-            }
-        }
-
-        async void Page_DOMContentLoaded(object sender, EventArgs evt)
-        {
-            try
-            {
-                var appPage = sender as Page;
-                if (appPage != null)
-                {
-                    foreach (var interceptor in Interceptors)
-                    {
-                        var func = interceptor.DOMContentLoadedAsync(appPage);
-
-                        if (func != null && await func.GoOn())
-                        {
-                            return;
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine(ex.ToString());
-            }
-        }
+#endif
     }
 }

@@ -1,25 +1,27 @@
-﻿<div id="app"><page-app></page-app></div>
-<script src='/vue.js'></script>
-<script src='/vuex.js'></script>
-<script src='/vuetify.js'></script>
-<script src='/lodash.js'></script>
-<script src="/moment.js"></script>
-<script src='/rxjs.js'></script>
-<script src="/chart.js"></script>
-<script src='/orgchart.js'></script>
-<script src='/canvas-datagrid.js'></script>
+﻿<style scoped>
+@import '/res/material-icons.css';
+@import '/res/vuetify.css';
+@import '/res/slds.css';
+@import '/res/orgchart.css';
+@import '/res/font-awesome.css';
+@import '/res/app.css';
+</style>
+<div id="app"><page-app></page-app></div>
+<script src='/res/vue.js'></script>
+<script src='/res/vuex.js'></script>
+<script src='/res/vuetify.js'></script>
+<script src='/res/lodash.js'></script>
+<script src="/res/moment.js"></script>
+<script src='/res/rxjs.js'></script>
+<script src="/res/chart.js"></script>
+<script src='/res/orgchart.js'></script>
+<script src='/res/canvas-datagrid.js'></script>
 <script>
     const { defer, interval, of, Subject, timer } = rxjs;
-    const { bufferTime, concat, concatMap, delayWhen, filter, ignoreElements, retryWhen, switchMap, takeWhile, tap } = rxjs.operators;
+    const { bufferTime, concat, concatMap, delayWhen, filter, ignoreElements, retryWhen, switchMap, takeWhile, tap, timeout } = rxjs.operators;
 
     const dispatch$ = new Subject();
     dispatch$.pipe(
-        bufferTime(50),
-        filter(actions => !!actions.length),
-        concatMap(actions => defer(async () => {
-            const newState = await subscribeDispatch(actions);
-            store.commit('setStates', [newState]);
-        })),
         delayWhen(() =>
             interval(1000).pipe(
                 takeWhile(_ => typeof subscribeDispatch === 'undefined'),
@@ -27,15 +29,23 @@
                 concat(of(1)),
             )
         ),
+        bufferTime(50),
+        filter(actions => !!actions.length),
+        concatMap(actions => defer(async () => {
+            const newState = await subscribeDispatch(actions);
+            store.commit('setStates', [newState]);
+        }).pipe(timeout(5000))),
         retryWhen(errors => errors.pipe(
-            tap(err => {
+            tap(_err => {
                 store.commit('setStates', [{ isLoading: true }]);
             }),
-            delayWhen(val => timer(5000).pipe(tap(_ => {
-                store.commit('setStates', [{ isLoading: false }]);
+            delayWhen(_val => timer(5000).pipe(tap(_ => {
+                dispatch$.next({ type: 'isLoading', payload: false });
             }))),
         )),
     ).subscribe();
+
+    interval(3000).pipe(concatMap(_ => defer(() => dispatch$.next({ type: 'healthCheckTime', payload: moment().format('YYYY-MM-DD HH:mm:ss') })))).subscribe();
 
     const store = new Vuex.Store({
         state: Object.assign(appState, { dispatch$ }),
@@ -60,9 +70,13 @@
         }
     }
 
+    Vue.filter('orglabel', (value) => {
+        if (!value) return ''
+        return value.replace(/^https:\/\/|\.my\.salesforce\.com$|\.salesforce\.com$/ig, '').split('.')[0].toUpperCase();
+    });
     Vue.filter('orgname', (value) => {
         if (!value) return ''
-        return value.replace(/^https:\/\/|\.my\.salesforce\.com$|\.salesforce\.com$/ig, '').toUpperCase();
+        return value.replace(/^https:\/\/|\.my\.salesforce\.com$|\.salesforce\.com$/ig, '').replace(' ', '-').toLowerCase();
     });
     Vue.filter('round', (value, dcp) => {
         return Math.round(value, dcp);
@@ -70,20 +84,12 @@
     Vue.filter('empty', (value, emptyValue) => {
         return value || emptyValue || '';
     });
+    Vue.filter('percent', (value, base) => {
+        return !base ? 0 : 100.0 * value / base;
+    });
     Vue.mixin({
         methods: {
-            currentOrgName() {
-                const { currentInstanceUrl } = this.$store.state;
-                return currentInstanceUrl ? currentInstanceUrl
-                    .replace(/^https:\/\/|\.my\.salesforce\.com$|\.salesforce\.com$/ig, '')
-                    .replace(' ', '-')
-                    .toLowerCase() : '';
-            },
             dispatch(type, payload) { return this.$store.state.dispatch$.next({ type, payload }); },
-            percent(a, b) {
-                if (!b) return 0;
-                return 100.0 * a / b;
-            },
             orgHasOfflineAccess(org) { return this.$store.state.orgOfflineAccess.indexOf(org) >= 0; },
             orgIsSandbox(org) { return this.$store.state.orgSandboxes.indexOf(org) >= 0; }
         },
@@ -107,5 +113,4 @@
 <script src="/components/page-app.js"></script>
 <script>
     const app = new Vue({ el: '#app', store });
-    store.state.dispatch$.next({ type: 'isLoading', payload: false });
 </script>

@@ -9,7 +9,7 @@
                 <div class="slds-box">
                     <button class="slds-button slds-button_neutral slds-button_stretch" style="padding:1em;font-size:150%;text-align:left;margin-bottom:0.2em" @click="dispatch('AttemptLogin',org)">
                         <button-iconleft type="standard" icon="default" class="slds-icon_large"></button-iconleft>
-                        {{org|orgname}}
+                        {{org|orglabel}}
                     </button>
 
                     <button class="slds-button slds-button_neutral" @click="dispatch('RemoveOrg',org)">

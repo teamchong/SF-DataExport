@@ -128,8 +128,8 @@
     },
     computed: {
         cmdLimits() {
-            const { cmd } = this.$store.state;
-            return cmd + ' loglimits@' + this.currentOrgName();
+            const { cmd, currentInstanceUrl } = this.$store.state;
+            return cmd + ' loglimits@' + this.$options.filters.orglabel(currentInstanceUrl);
         },
         currentInstanceUrl() {
             return this.$store.state.currentInstanceUrl;

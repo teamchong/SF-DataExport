@@ -2,11 +2,11 @@
     template,
     computed: {
         cmdExport() {
-            const { cmd } = this.$store.state;
+            const { cmd, currentInstanceUrl } = this.$store.state;
             const { exportEmails, exportPath } = this;
             const exportEmailsParam = exportEmails ? " --email \"" + exportEmails + "\"" : "";
             const exportPathParam = exportPath ? " --path \"" + exportPath + "\"" : "";
-            return cmd + ' download@' + this.currentOrgName() + exportEmailsParam + exportPathParam;
+            return cmd + ' download@' + this.$options.filters.orglabel(currentInstanceUrl) + exportEmailsParam + exportPathParam;
         },
         currentInstanceUrl() { return this.$store.state.currentInstanceUrl; },
         exportEmails: {

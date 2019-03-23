@@ -41,11 +41,11 @@
 					<div class="slds-grid slds-grid_align-spread slds-p-bottom_x-small" id="progress-bar-label-id-1">
 						<span>{{value.Name}} ( {{value.Remaining}} of {{value.Max}} left)</span>
 						<span>
-							<strong>{{percent(value.Max-value.Remaining,value.Max)|round(2)}}%</strong>
+							<strong>{{(value.Max-value.Remaining|percent(value.Max))|round(2)}}%</strong>
 						</span>
 					</div>
 					<div class="slds-progress-bar slds-progress-bar_circular">
-						<span class="slds-progress-bar__value" :style="{width:percent(value.Max-value.Remaining,value.Max)+'%',background:percent(value.Max-value.Remaining,value.Max)>90?'red':percent(value.Max-value.Remaining,value.Max)>70?'orange':''}"></span>
+						<span class="slds-progress-bar__value" :style="{width:$options.filters.percent(value.Max-value.Remaining,value.Max)+'%',background:percent(value.Max-value.Remaining,value.Max)>90?'red':percent(value.Max-value.Remaining,value.Max)>70?'orange':''}"></span>
 					</div>
 					<p>&nbsp;</p>
 				</div>

@@ -19,20 +19,39 @@ namespace SF_DataExport.Interceptor
 
         public override async Task<bool> RequestAsync(Page appPage, Request request)
         {
-            if (Resource.IsLoginUrl(request.Url) && request.Url.Count(c => c == '/') == 3 && !request.Url.EndsWith('/'))
+            if (Resource.IsLoginUrl(request.Url))
             {
-                var path = request.Url.Split('/').LastOrDefault();
-                var file = Resource.GetResourceBytes(path);
-                if (file != null)
-                    await AppState.IntercepObservable(appPage, request, () => request.RespondAsync(new ResponseData
-                    {
-                        Status = HttpStatusCode.OK,
-                        ContentType = Resource.GetContentType(path),
-                        BodyData = file
-                    }));
-                else
-                    await AppState.IntercepObservable(appPage, request, () => request.ContinueAsync());
-                return true;
+                if (request.Url.EndsWith(".salesforce.com/favicon.ico"))
+                {
+                    var file = Resource.GetResourceBytes("favicon.ico");
+                    if (file?.LongLength > 0)
+                        await AppState.InterceptAsync(appPage, request, req => req.RespondAsync(new ResponseData
+                        {
+                            Status = HttpStatusCode.OK,
+                            ContentType = Resource.GetContentType("favicon.ico"),
+                            BodyData = file
+                        })).GoOn();
+                    else
+                        await AppState.InterceptAsync(appPage, request, req => req.ContinueAsync()).GoOn();
+
+                    return true;
+                }
+                else if (request.Url.Contains(".salesforce.com/res/") && (request.Url.EndsWith(".js") || request.Url.EndsWith(".css")))
+                {
+                    var path = request.Url.Split(".salesforce.com/res/", 2).Last().Split('?').First();
+                    var file = Resource.GetResource(path);
+                    if (file?.Length > 0)
+                        await AppState.InterceptAsync(appPage, request, req => req.RespondAsync(new ResponseData
+                        {
+                            Status = HttpStatusCode.OK,
+                            ContentType = Resource.GetContentType(path),
+                            Body = file
+                        })).GoOn();
+                    else
+                        await AppState.InterceptAsync(appPage, request, req => req.ContinueAsync()).GoOn();
+
+                    return true;
+                }
             }
             return false;
         }

@@ -23,15 +23,16 @@ namespace SF_DataExport.Interceptor
             {
                 var iconPath = "icons/" + request.Url.Split(".salesforce.com/assets/icons/", 2).Last().Split('?').First();
                 var icon = Resource.GetResourceBytes(iconPath);
-                if (icon != null)
-                    await AppState.IntercepObservable(appPage, request, () => request.RespondAsync(new ResponseData
+                if (icon?.LongLength > 0)
+                    await AppState.InterceptAsync(appPage, request, req => req.RespondAsync(new ResponseData
                     {
                         Status = HttpStatusCode.OK,
                         ContentType = Resource.GetContentType(iconPath),
                         BodyData = icon
-                    }));
+                    })).GoOn();
                 else
-                    await AppState.IntercepObservable(appPage, request, () => request.ContinueAsync());
+                    await AppState.InterceptAsync(appPage, request, req => req.ContinueAsync()).GoOn();
+
                 return true;
             }
             return false;

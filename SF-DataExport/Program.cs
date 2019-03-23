@@ -43,7 +43,7 @@ namespace SF_DataExport
                 return new AppStateManager(appSettings, orgSettings, resource, s.GetService<Dictionary<string, Func<JToken, Task<JToken>>>>());
             });
 
-            services.AddSingleton<InterceptorBase>(s => new HomeInterceptor(s.GetService<ResourceManager>(), s.GetService<AppStateManager>()));
+            services.AddSingleton<InterceptorBase>(s => new AppPageInterceptor(s.GetService<ResourceManager>(), s.GetService<AppStateManager>()));
             services.AddSingleton<InterceptorBase>(s => new ComponentInterceptor(s.GetService<ResourceManager>(), s.GetService<AppStateManager>()));
             services.AddSingleton<InterceptorBase>(s => new RootInterceptor(s.GetService<ResourceManager>(), s.GetService<AppStateManager>()));
             services.AddSingleton<InterceptorBase>(s => new FontInterceptor(s.GetService<ResourceManager>(), s.GetService<AppStateManager>()));
@@ -74,14 +74,14 @@ namespace SF_DataExport
                 var appSettings = s.GetService<AppSettingsConfig>();
                 var chromePath = appSettings.GetString(AppConstants.PATH_CHROME);
                 var appState = s.GetService<AppStateManager>();
-                var interceptors = s.GetServices<InterceptorBase>().ToList();
+                var interceptors = s.GetServices<InterceptorBase>().ToObservable();
                 return new AppDialog(chromePath, command, appState, interceptors);
             });
-            services.AddTransient(s => GetLineApplication(s));
+            services.AddTransient(s => CreateCliApplication(s));
             return services;
         }
 
-        static CommandLineApplication GetLineApplication(IServiceProvider service)
+        static CommandLineApplication CreateCliApplication(IServiceProvider service)
         {
             Console.WriteLine(AppDomain.CurrentDomain.FriendlyName + " v" + typeof(Program).Assembly.GetName().Version);
             var resource = service.GetService<ResourceManager>();
@@ -92,20 +92,9 @@ namespace SF_DataExport
 
             foreach (var org in orgSettings.Get(d => d.Properties()))
             {
-                var orgName = resource.OrgName(org.Name);
+                var instanceUrl = org.Name;
+                var orgName = resource.GetOrgName(instanceUrl);
                 var hasOfflineAccess = !string.IsNullOrEmpty((string)org.Value[OAuth.REFRESH_TOKEN]);
-
-                cliApp.Command(orgName, cliCfg =>
-                {
-                    var pathOpt = cliCfg.Option("--chromepath", "Chrome executable path", CommandOptionType.SingleValue);
-                    var channelOpt = cliCfg.Option("--chromechannel", "Preferred Chrome Channel", CommandOptionType.SingleValue);
-                    cliCfg.OnExecute(async () =>
-                    {
-                        cliApp.ShowHelp();
-                        await InitializeChromeSettingsAsync(appSettings, resource, pathOpt, channelOpt).GoOn();
-                        return await StartAsync(service, new JObject { ["type"] = "AttemptLogin", ["payload"] = org.Name }).GoOn();
-                    });
-                });
 
                 if (hasOfflineAccess)
                 {
@@ -113,57 +102,53 @@ namespace SF_DataExport
                     {
                         var emailOpt = cliCfg.Option("--email", "Email to", CommandOptionType.SingleValue);
                         var exportPathOpt = cliCfg.Option("--path", "Export to path", CommandOptionType.SingleValue);
-                        cliCfg.OnExecute(async () =>
+                        cliCfg.OnExecute(() => StartAsync(service, new JObject
                         {
-                            return await StartAsync(service, new JObject
-                            {
-                                ["command"] = AppConstants.COMMAND_DOWNLOAD,
-                                ["exportEmails"] = emailOpt.Value(),
-                                ["exportPath"] = exportPathOpt.Value(),
-                            }).GoOn();
-                        });
+                            ["command"] = AppConstants.COMMAND_DOWNLOAD,
+                            ["exportEmails"] = emailOpt.Value(),
+                            ["exportPath"] = exportPathOpt.Value(),
+                        }));
                     });
                     cliApp.Command("loginas@" + orgName, cliCfg =>
                     {
                         var userOpt = cliCfg.Option("--user", "User Id", CommandOptionType.SingleValue);
                         var pageOpt = cliCfg.Option("--page", "Page to visit", CommandOptionType.SingleValue);
-                        cliCfg.OnExecute(async () =>
+                        cliCfg.OnExecute(() => StartAsync(service, new JObject
                         {
-                            return await StartAsync(service, new JObject
-                            {
-                                ["command"] = AppConstants.COMMAND_LOGIN_AS,
-                                ["userId"] = userOpt.Value(),
-                                ["page"] = pageOpt.Value(),
-                            }).GoOn();
-                        });
+                            ["command"] = AppConstants.COMMAND_LOGIN_AS,
+                            ["userId"] = userOpt.Value(),
+                            ["page"] = pageOpt.Value(),
+                        }));
                     });
                     cliApp.Command("loglimits@" + orgName, cliCfg =>
                     {
-                        cliCfg.OnExecute(async () =>
+                        cliCfg.OnExecute(() => StartAsync(service, new JObject
                         {
-                            return await StartAsync(service, new JObject
-                            {
-                                ["command"] = AppConstants.COMMAND_LOG_LIMITS
-                            }).GoOn();
-                        });
+                            ["command"] = AppConstants.COMMAND_LOG_LIMITS
+                        }));
                     });
                 }
+
+                cliApp.Command(orgName, cliCfg => AddCliCommandWithUI(cliCfg, new JObject { ["type"] = "AttemptLogin", ["payload"] = org.Name }));
             }
 
+            AddCliCommandWithUI(cliApp, null);
+            return cliApp;
+
+            void AddCliCommandWithUI(CommandLineApplication app, JObject command)
             {
-                var pathOpt = cliApp.Option("--chromepath", "Chrome executable path", CommandOptionType.SingleValue);
-                var channelOpt = cliApp.Option("--chromechannel", "Preferred Chrome Channel", CommandOptionType.SingleValue);
-                cliApp.OnExecute(async () =>
+                var pathOpt = app.Option("--chromepath", "Chrome executable path", CommandOptionType.SingleValue);
+                var channelOpt = app.Option("--chromechannel", "Preferred Chrome Channel", CommandOptionType.SingleValue);
+                app.OnExecute(async () =>
                 {
-                    cliApp.ShowHelp();
-                    await InitializeChromeSettingsAsync(appSettings, resource, pathOpt, channelOpt).GoOn();
-                    return await StartAsync(service, null).GoOn();
+                    app.ShowHelp();
+                    await InitializeChromeAsync(appSettings, resource, pathOpt, channelOpt).GoOn();
+                    return await StartAsync(service, command).GoOn();
                 });
             }
-            return cliApp;
         }
 
-        static async Task InitializeChromeSettingsAsync(AppSettingsConfig appSettings, ResourceManager resource, CommandOption pathOpt, CommandOption channelOpt)
+        static async Task InitializeChromeAsync(AppSettingsConfig appSettings, ResourceManager resource, CommandOption pathOpt, CommandOption channelOpt)
         {
             var chromePathInConfig = appSettings.GetString(AppConstants.PATH_CHROME);
             var chromePath = GetChromePath(resource, channelOpt.Value(), pathOpt.Value(), chromePathInConfig);
@@ -193,7 +178,7 @@ namespace SF_DataExport
             if (string.IsNullOrEmpty(appSettings.GetString(AppConstants.PATH_CHROME)))
             {
                 resource.OpenBrowser("https://www.google.com/chrome");
-                throw new Exception("Cannot find chromium installation path, please specific the path using the -chromepath <path> option.");
+                throw new Exception("Cannot find chromium installation path, please download at https://www.google.com/chrome or specific the path using the -chromepath <path> option.");
             }
         }
 
@@ -213,7 +198,7 @@ namespace SF_DataExport
                 }
             }
 
-            var (chromePath, type) = new ChromeFinder(resource).Find(channelOpt);
+            var (chromePath, type) = finder.Find(channelOpt);
             if (string.IsNullOrEmpty(chromePath))
             {
                 return null;

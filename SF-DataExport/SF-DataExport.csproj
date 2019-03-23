@@ -12,7 +12,7 @@
     <ApplicationIcon>favicon.ico</ApplicationIcon>
     <StartupObject />
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <Version>1.0.4.0002</Version>
+    <Version>1.0.5.1001</Version>
     <RepositoryUrl>https://github.com/ste80/sf-dataexport</RepositoryUrl>
     <RepositoryType>GIT</RepositoryType>
     <PackageProjectUrl>https://github.com/ste80/sf-dataexport</PackageProjectUrl>

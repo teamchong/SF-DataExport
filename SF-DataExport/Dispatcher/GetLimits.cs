@@ -33,7 +33,7 @@ namespace SF_DataExport.Dispatcher
             AppState.Commit(new JObject { ["showLimitsModal"] = showLimitsModal });
             if (showLimitsModal)
             {
-                var orgName = Resource.OrgName(instanceUrl);
+                var orgName = Resource.GetOrgName(instanceUrl);
 
                 if (!string.IsNullOrEmpty(orgName))
                 {
@@ -48,13 +48,12 @@ namespace SF_DataExport.Dispatcher
                     var orgLimits = new JArray();
 
                     var limits = (JObject)result.Results("0") ?? new JObject();
-                    var limitsKeys = limits.Properties().Select(p => p.Name).ToList();
-                    foreach (var limitsKey in limitsKeys)
+                    foreach (var limitsProp in limits.Properties())
                     {
-                        var limit = (JObject)limits[limitsKey];
+                        var limit = (JObject)limitsProp.Value;
                         orgLimits.Add(new JObject
                         {
-                            ["Name"] = limitsKey,
+                            ["Name"] = limitsProp.Name,
                             ["Remaining"] = limit["Remaining"],
                             ["Max"] = limit["Max"],
                         });

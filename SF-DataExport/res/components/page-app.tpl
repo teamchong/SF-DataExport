@@ -130,5 +130,5 @@
     </v-modal>
 	
     <spinner class="slds-spinner slds-spinner_medium" v-if="isLoading"></spinner>
-    <div class="slds-backdrop slds-backdrop_open" v-if="isLoading"></div>
+    <div class="slds-backdrop slds-backdrop_open" v-if="isLoading" style="z-index:9050;"></div>
 </v-app>

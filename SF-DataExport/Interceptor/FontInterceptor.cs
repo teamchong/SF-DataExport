@@ -19,19 +19,20 @@ namespace SF_DataExport.Interceptor
 
         public override async Task<bool> RequestAsync(Page appPage, Request request)
         {
-            if (Resource.IsLoginUrl(request.Url) && request.Url.Contains(".salesforce.com/fonts/"))
+            if (Resource.IsLoginUrl(request.Url) && request.Url.Contains(".salesforce.com/res/fonts/"))
             {
-                var fntPath = "fonts/" + request.Url.Split(".salesforce.com/fonts/", 2).Last().Split('?').First();
+                var fntPath = "fonts/" + request.Url.Split(".salesforce.com/res/fonts/", 2).Last().Split('?').First();
                 var fnt = Resource.GetResourceBytes(fntPath);
-                if (fnt != null)
-                    await AppState.IntercepObservable(appPage, request, () => request.RespondAsync(new ResponseData
+                if (fnt?.LongLength > 0)
+                    await AppState.InterceptAsync(appPage, request, req => req.RespondAsync(new ResponseData
                     {
                         Status = HttpStatusCode.OK,
                         ContentType = Resource.GetContentType(fntPath),
                         BodyData = fnt
-                    }));
+                    })).GoOn();
                 else
-                    await AppState.IntercepObservable(appPage, request, () => request.ContinueAsync());
+                    await AppState.InterceptAsync(appPage, request, req => req.ContinueAsync()).GoOn();
+
                 return true;
             }
             return false;

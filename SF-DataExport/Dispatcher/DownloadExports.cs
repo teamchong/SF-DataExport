@@ -9,6 +9,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Threading.Tasks;
 using System.Reactive.Concurrency;
+using System.Reactive.Threading.Tasks;
 using System.Reactive.Linq;
 using System.Text.RegularExpressions;
 using System.Web;
@@ -35,7 +36,7 @@ namespace SF_DataExport.Dispatcher
                 AppState.Commit(new JObject { ["isLoading"] = true });
                 var exportPath = (string)payload["exportPath"] ?? "";
                 var instanceUrl = (string)payload["instanceUrl"] ?? "";
-                var exportEmails = (string)payload["exportEmails"] ?? "";
+                var exportEmails = ((string)payload["exportEmails"])?.Trim() ?? "";
 
                 var id = (string)OrgSettings.Get(o => o[instanceUrl]?[OAuth.ID]) ?? "";
                 var accessToken = (string)OrgSettings.Get(o => o[instanceUrl]?[OAuth.ACCESS_TOKEN]) ?? "";
@@ -75,7 +76,7 @@ namespace SF_DataExport.Dispatcher
                                 var href = HttpUtility.HtmlDecode(link.GetAttributeValue("href", ""));
                                 var match = validHref.Match(href);
                                 var filename = match?.Groups[1]?.Value;
-                                if (!string.IsNullOrEmpty(filename))
+                                if (filename?.Length > 0)
                                 {
                                     if (href.StartsWith('/')) href = instanceUrl + href;
                                     subject.Add((HttpUtility.UrlDecode(filename), href));
@@ -187,7 +188,7 @@ namespace SF_DataExport.Dispatcher
                                 else if (result?.StartsWith("Failed...") == true)
                                     failed++;
                             }
-                            if ((downloaded > 0 || failed > 0) && !string.IsNullOrEmpty(exportEmails))
+                            if ((downloaded > 0 || failed > 0) && exportEmails?.Length > 0)
                             {
                                 var client = new DNFClient(instanceUrl, accessToken);
                                 await Observable.FromAsync(() => client.JsonHttp.HttpPostAsync<JArray>(new JObject
@@ -206,7 +207,7 @@ namespace SF_DataExport.Dispatcher
                                 }, new Uri($"{client.InstanceUrl}/services/data/{client.ApiVersion}/actions/standard/emailSimple")))
                                 .SelectMany(result => Observable.Defer(() => Observable.Start(() => Console.WriteLine(result?.ToString()))))
                                 .Catch((Exception ex) => Observable.Defer(() => Observable.Start(() => Console.WriteLine(ex.ToString()))))
-                                .SubscribeOn(TaskPoolScheduler.Default);
+                                .LastOrDefaultAsync().ToTask().GoOn();
                             }
                             Console.WriteLine("Export completed " + Resource.GetDisplaySize(totalSize));
                             exportResult.Append("Export completed " + Resource.GetDisplaySize(totalSize));

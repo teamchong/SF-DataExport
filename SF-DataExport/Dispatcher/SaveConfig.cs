@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reactive.Concurrency;
 using System.Reactive.Linq;
+using System.Reactive.Threading.Tasks;
 using System.Threading.Tasks;
 using Unit = System.Reactive.Unit;
 
@@ -58,8 +59,7 @@ namespace SF_DataExport.Dispatcher
             }))
             .Concat()
             .Finally(() => AppState.Commit(new JObject { ["isLoading"] = false }))
-            .LastOrDefaultAsync()
-            .SubscribeOn(TaskPoolScheduler.Default);
+            .LastOrDefaultAsync().ToTask().GoOn();
             return null;
         }
     }

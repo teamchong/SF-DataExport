@@ -18,7 +18,7 @@
         <div class="slds-global-header__item">
             <h1 v-if="currentInstanceUrl">
                 <a href="javascript:void(0)" @click="dispatch('ViewPage',currentInstanceUrl)">
-                    {{currentInstanceUrl|orgname}}
+                    {{currentInstanceUrl|orglabel}}
                 </a>
             </h1>
         </div>

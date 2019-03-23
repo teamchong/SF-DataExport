@@ -49,7 +49,7 @@ namespace SF_DataExport.Dispatcher
                 }).GoOn();
             AppState.Commit(AppState.GetOrgSettings());
 
-            if ((string)AppState.Value["currentInstanceUrl"] == instanceUrl)
+            if ((string)AppState.GetState("currentInstanceUrl") == instanceUrl)
             {
                 AppState.Commit(new JObject
                 {

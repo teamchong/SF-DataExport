@@ -35,12 +35,6 @@ namespace SF_DataExport
 <head>
 <title>Salesforce DataExport</title>
 <link rel='shortcut icon' type='image/x-icon' href='/favicon.ico'/>
-<link rel='stylesheet' type='text/css' href='/material-icons.css'/>
-<link rel='stylesheet' type='text/css' href='/vuetify.css'/>
-<link rel='stylesheet' type='text/css' href='/slds.css'/>
-<link rel='stylesheet' type='text/css' href='/orgchart.css'/>
-<link rel='stylesheet' type='text/css' href='/font-awesome.css'/>
-<link rel='stylesheet' type='text/css' href='/app.css'/>
 </head>
 <body>
 <script>const appState=");
@@ -53,10 +47,16 @@ namespace SF_DataExport
                 (DateTime.Now, new CookieContainer(), "", ""));
         }
 
-        public string OrgName(string instanceUrl)
+        public string GetOrgName(string instanceUrl)
         {
             var replaceRex = new Regex(@"^https://|\.my\.salesforce\.com$|\.salesforce\.com$", RegexOptions.IgnoreCase);
             return replaceRex.Replace(instanceUrl ?? "", "").Replace(" ", "-").ToLower();
+        }
+
+        public string GetOrgLabel(string instanceUrl)
+        {
+            var replaceRex = new Regex(@"^https://|\.my\.salesforce\.com$|\.salesforce\.com$", RegexOptions.IgnoreCase);
+            return replaceRex.Replace(instanceUrl ?? "", "").Split('.').First().ToUpper();
         }
 
         public async Task<JArray> GetOrgLimitsLogAsync(string orgName)
@@ -276,7 +276,7 @@ namespace SF_DataExport
             return url.StartsWith("https://login.salesforce.com/") || url.StartsWith("https://test.salesforce.com/");
         }
 
-        public bool IsRedirectPage(string url)
+        public bool IsAppPage(string url)
         {
             switch (url)
             {
