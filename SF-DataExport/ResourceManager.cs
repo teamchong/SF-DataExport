@@ -5,11 +5,11 @@ using Newtonsoft.Json.Linq;
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
-using System.Runtime.InteropServices;
-using System.Linq;
 using System.Reactive.Subjects;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -50,7 +50,7 @@ namespace SF_DataExport
         public string GetOrgName(string instanceUrl)
         {
             var replaceRex = new Regex(@"^https://|\.my\.salesforce\.com$|\.salesforce\.com$", RegexOptions.IgnoreCase);
-            return replaceRex.Replace(instanceUrl ?? "", "").Replace(" ", "-").ToLower();
+            return replaceRex.Replace(instanceUrl ?? "", "").Replace(" ", "-").Split('.').First().ToLower();
         }
 
         public string GetOrgLabel(string instanceUrl)

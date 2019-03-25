@@ -1,10 +1,10 @@
 ﻿<style scoped>
-@import '/res/material-icons.css';
-@import '/res/vuetify.css';
-@import '/res/slds.css';
-@import '/res/orgchart.css';
-@import '/res/font-awesome.css';
-@import '/res/app.css';
+@import '/res/css/material-icons.css';
+@import '/res/css/vuetify.css';
+@import '/res/css/slds.css';
+@import '/res/css/orgchart.css';
+@import '/res/css/font-awesome.css';
+@import '/res/css/app.css';
 </style>
 <div id="app"><page-app></page-app></div>
 <script src='/res/vue.js'></script>
@@ -76,7 +76,7 @@
     });
     Vue.filter('orgname', (value) => {
         if (!value) return ''
-        return value.replace(/^https:\/\/|\.my\.salesforce\.com$|\.salesforce\.com$/ig, '').replace(' ', '-').toLowerCase();
+        return value.replace(/^https:\/\/|\.my\.salesforce\.com$|\.salesforce\.com$/ig, '').replace(' ', '-').split('.')[0].toLowerCase();
     });
     Vue.filter('round', (value, dcp) => {
         return Math.round(value, dcp);

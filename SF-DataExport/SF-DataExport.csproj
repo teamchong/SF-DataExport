@@ -9,10 +9,10 @@
     <AssemblyName>sf-dataexport</AssemblyName>
     <RootNamespace>SF_DataExport</RootNamespace>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-    <ApplicationIcon>favicon.ico</ApplicationIcon>
+    <ApplicationIcon>res/images/favicon.ico</ApplicationIcon>
     <StartupObject />
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <Version>1.0.5.1001</Version>
+    <Version>1.0.5.1003</Version>
     <RepositoryUrl>https://github.com/ste80/sf-dataexport</RepositoryUrl>
     <RepositoryType>GIT</RepositoryType>
     <PackageProjectUrl>https://github.com/ste80/sf-dataexport</PackageProjectUrl>
@@ -21,7 +21,7 @@
     <PackageTags>salesforce</PackageTags>
     <PackageReleaseNotes>https://raw.githubusercontent.com/ste80/SF-DataExport/master/README.md</PackageReleaseNotes>
     <Copyright>2019 Steven Chong</Copyright>
-    <PackageIconUrl>https://github.com/ste80/SF-DataExport/raw/master/SF-DataExport/res/favicon.ico</PackageIconUrl>
+    <PackageIconUrl>https://github.com/ste80/SF-DataExport/raw/master/SF-DataExport/res/images/favicon.ico</PackageIconUrl>
   </PropertyGroup>
 
   <ItemGroup>

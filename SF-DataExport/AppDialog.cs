@@ -1,18 +1,14 @@
-﻿using DotNetForce;
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using PuppeteerSharp;
-using SF_DataExport.Dispatcher;
-using SF_DataExport.Interceptor;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reactive;
-using System.Reactive.Threading.Tasks;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
+using System.Reactive.Threading.Tasks;
 using System.Threading.Tasks;
-using System.Web;
 using Unit = System.Reactive.Unit;
 
 namespace SF_DataExport
@@ -21,14 +17,14 @@ namespace SF_DataExport
     {
         string ChromePath { get; }
         JObject Command { get; }
-        AppStateManager AppState { get; }
+        AppStore AppState { get; }
         IObservable<InterceptorBase> Interceptors { get; }
 
-        public AppDialog(string chromePath, JObject command, AppStateManager appState, IObservable<InterceptorBase> interceptors)
+        public AppDialog(string chromePath, JObject command, AppStore store, IObservable<InterceptorBase> interceptors)
         {
             ChromePath = chromePath;
             Command = command;
-            AppState = appState;
+            AppState = store;
             Interceptors = interceptors;
         }
 
@@ -101,7 +97,7 @@ namespace SF_DataExport
                 AppState.Commit(new JObject { [AppConstants.ACTION_REDIRECT] = OAuth.REDIRECT_URI });
                 if (Command != null)
                 {
-                    await AppState.DispatchActionsAsync(appPage, new JArray(Command));
+                    await AppState.ReduceActionsAsync(appPage, new JArray(Command));
                 }
                 await isClose.LastOrDefaultAsync().ToTask().GoOn();
             }

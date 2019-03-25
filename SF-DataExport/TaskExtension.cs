@@ -1,12 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Runtime.CompilerServices;
-using System.Text;
+﻿using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
-using System.Reactive.Linq;
-using System.Reactive.Concurrency;
-using System.Reactive.Threading.Tasks;
 
 namespace SF_DataExport
 {

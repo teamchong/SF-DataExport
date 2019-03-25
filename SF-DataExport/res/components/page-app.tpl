@@ -107,7 +107,7 @@
 					<a :href="'mailto:'+userEmail">{{userEmail}}</a>
 				</div>
                 <div v-if="userPicture">
-                    <img :src="userPicture" />
+                    <img :src="userPicture" :alt="userDisplayName" />
                 </div>
             </div>
         </div>

@@ -1,10 +1,9 @@
 ﻿using Microsoft.Extensions.CommandLineUtils;
 using Microsoft.Extensions.DependencyInjection;
 using Newtonsoft.Json.Linq;
-using SF_DataExport.Dispatcher;
-using SF_DataExport.Interceptor;
+using SF_DataExport.Interceptors;
+using SF_DataExport.Reducers;
 using System;
-using System.IO;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reactive.Linq;
@@ -40,32 +39,32 @@ namespace SF_DataExport
                 var appSettings = s.GetService<AppSettingsConfig>();
                 var orgSettings = s.GetService<OrgSettingsConfig>();
                 var resource = s.GetService<ResourceManager>();
-                return new AppStateManager(appSettings, orgSettings, resource, s.GetService<Dictionary<string, Func<JToken, Task<JToken>>>>());
+                return new AppStore(appSettings, orgSettings, resource, s.GetService<Dictionary<string, Func<JToken, Task<JToken>>>>());
             });
 
-            services.AddSingleton<InterceptorBase>(s => new AppPageInterceptor(s.GetService<ResourceManager>(), s.GetService<AppStateManager>()));
-            services.AddSingleton<InterceptorBase>(s => new ComponentInterceptor(s.GetService<ResourceManager>(), s.GetService<AppStateManager>()));
-            services.AddSingleton<InterceptorBase>(s => new RootInterceptor(s.GetService<ResourceManager>(), s.GetService<AppStateManager>()));
-            services.AddSingleton<InterceptorBase>(s => new FontInterceptor(s.GetService<ResourceManager>(), s.GetService<AppStateManager>()));
-            services.AddSingleton<InterceptorBase>(s => new IconInterceptor(s.GetService<ResourceManager>(), s.GetService<AppStateManager>()));
-            services.AddSingleton<InterceptorBase>(s => new ImageInterceptor(s.GetService<ResourceManager>(), s.GetService<AppStateManager>()));
-            services.AddSingleton<InterceptorBase>(s => new ProfilePhotoInterceptor(s.GetService<ResourceManager>(), s.GetService<OrgSettingsConfig>(), s.GetService<AppStateManager>()));
+            services.AddSingleton<InterceptorBase>(s => new AppPageInterceptor(s.GetService<ResourceManager>(), s.GetService<AppStore>()));
+            services.AddSingleton<InterceptorBase>(s => new ComponentInterceptor(s.GetService<ResourceManager>(), s.GetService<AppStore>()));
+            services.AddSingleton<InterceptorBase>(s => new ResInterceptor(s.GetService<ResourceManager>(), s.GetService<AppStore>()));
+            services.AddSingleton<InterceptorBase>(s => new FontInterceptor(s.GetService<ResourceManager>(), s.GetService<AppStore>()));
+            services.AddSingleton<InterceptorBase>(s => new IconInterceptor(s.GetService<ResourceManager>(), s.GetService<AppStore>()));
+            services.AddSingleton<InterceptorBase>(s => new ImageInterceptor(s.GetService<ResourceManager>(), s.GetService<AppStore>()));
+            services.AddSingleton<InterceptorBase>(s => new ProfilePhotoInterceptor(s.GetService<ResourceManager>(), s.GetService<OrgSettingsConfig>(), s.GetService<AppStore>()));
 
             services.AddSingleton(s => new Dictionary<string, Func<JToken, Task<JToken>>>
             {
-                [nameof(AttemptLogin)] = payload => new AttemptLogin(s.GetService<AppStateManager>(), s.GetService<ResourceManager>(), s.GetService<OrgSettingsConfig>()).DispatchAsync(payload),
-                [nameof(DownloadExports)] = payload => new DownloadExports(s.GetService<AppStateManager>(), s.GetService<ResourceManager>(), s.GetService<OrgSettingsConfig>()).DispatchAsync(payload),
+                [nameof(AttemptLogin)] = payload => new AttemptLogin(s.GetService<AppStore>(), s.GetService<ResourceManager>(), s.GetService<OrgSettingsConfig>()).DispatchAsync(payload),
+                [nameof(DownloadExports)] = payload => new DownloadExports(s.GetService<AppStore>(), s.GetService<ResourceManager>(), s.GetService<OrgSettingsConfig>()).DispatchAsync(payload),
                 [nameof(FetchDirPath)] = payload => new FetchDirPath().DispatchAsync(payload),
                 [nameof(FetchFilePath)] = payload => new FetchFilePath().DispatchAsync(payload),
                 [nameof(LoginAsUser)] = payload => new LoginAsUser(s.GetService<ResourceManager>(), s.GetService<AppSettingsConfig>(), s.GetService<OrgSettingsConfig>()).DispatchAsync(payload),
-                [nameof(RemoveOfflineAccess)] = payload => new RemoveOfflineAccess(s.GetService<AppStateManager>(), s.GetService<OrgSettingsConfig>()).DispatchAsync(payload),
-                [nameof(RemoveOrg)] = payload => new RemoveOrg(s.GetService<AppStateManager>(), s.GetService<ResourceManager>(), s.GetService<AppSettingsConfig>(), s.GetService<OrgSettingsConfig>()).DispatchAsync(payload),
-                [nameof(SaveConfig)] = payload => new SaveConfig(s.GetService<AppStateManager>(), s.GetService<AppSettingsConfig>()).DispatchAsync(payload),
-                [nameof(SetOrgSettingsPath)] = payload => new SetOrgSettingsPath(s.GetService<AppStateManager>()).DispatchAsync(payload),
-                [nameof(SwitchUser)] = payload => new SwitchUser(s.GetService<AppStateManager>(), s.GetService<ResourceManager>(), s.GetService<OrgSettingsConfig>()).DispatchAsync(payload),
+                [nameof(RemoveOfflineAccess)] = payload => new RemoveOfflineAccess(s.GetService<AppStore>(), s.GetService<OrgSettingsConfig>()).DispatchAsync(payload),
+                [nameof(RemoveOrg)] = payload => new RemoveOrg(s.GetService<AppStore>(), s.GetService<ResourceManager>(), s.GetService<AppSettingsConfig>(), s.GetService<OrgSettingsConfig>()).DispatchAsync(payload),
+                [nameof(SaveConfig)] = payload => new SaveConfig(s.GetService<AppStore>(), s.GetService<AppSettingsConfig>()).DispatchAsync(payload),
+                [nameof(SetOrgSettingsPath)] = payload => new SetOrgSettingsPath(s.GetService<AppStore>()).DispatchAsync(payload),
+                [nameof(SwitchUser)] = payload => new SwitchUser(s.GetService<AppStore>(), s.GetService<ResourceManager>(), s.GetService<OrgSettingsConfig>()).DispatchAsync(payload),
                 [nameof(ViewDownloadExports)] = payload => new ViewDownloadExports(s.GetService<ResourceManager>(), s.GetService<AppSettingsConfig>(), s.GetService<OrgSettingsConfig>()).DispatchAsync(payload),
-                [nameof(ViewPage)] = payload => new ViewPage(s.GetService<AppStateManager>(), s.GetService<ResourceManager>(), s.GetService<AppSettingsConfig>(), s.GetService<OrgSettingsConfig>()).DispatchAsync(payload),
-                [nameof(GetLimits)] = payload => new GetLimits(s.GetService<AppStateManager>(), s.GetService<ResourceManager>(), s.GetService<OrgSettingsConfig>()).DispatchAsync(payload),
+                [nameof(ViewPage)] = payload => new ViewPage(s.GetService<AppStore>(), s.GetService<ResourceManager>(), s.GetService<AppSettingsConfig>(), s.GetService<OrgSettingsConfig>()).DispatchAsync(payload),
+                [nameof(GetLimits)] = payload => new GetLimits(s.GetService<AppStore>(), s.GetService<ResourceManager>(), s.GetService<OrgSettingsConfig>()).DispatchAsync(payload),
                 [nameof(ViewUserPage)] = payload => new ViewUserPage(s.GetService<ResourceManager>(), s.GetService<AppSettingsConfig>(), s.GetService<OrgSettingsConfig>()).DispatchAsync(payload),
             });
 
@@ -73,9 +72,9 @@ namespace SF_DataExport
             {
                 var appSettings = s.GetService<AppSettingsConfig>();
                 var chromePath = appSettings.GetString(AppConstants.PATH_CHROME);
-                var appState = s.GetService<AppStateManager>();
+                var store = s.GetService<AppStore>();
                 var interceptors = s.GetServices<InterceptorBase>().ToObservable();
-                return new AppDialog(chromePath, command, appState, interceptors);
+                return new AppDialog(chromePath, command, store, interceptors);
             });
             services.AddTransient(s => CreateCliApplication(s));
             return services;
@@ -212,7 +211,7 @@ namespace SF_DataExport
             var appSettings = service.GetService<AppSettingsConfig>();
             Console.WriteLine(AppConstants.JSON_APP_SETTINGS + ": " + appSettings.Get(d => d.ToString(0)));
 
-            var processed = await service.GetService<AppStateManager>().ProcessCommandAsync(command);
+            var processed = await service.GetService<AppStore>().ProcessCommandAsync(command);
             if (!processed)
             {
                 await service.GetService<Func<JObject, AppDialog>>()(command).ShowAsync().GoOn();

@@ -1,0 +1,122 @@
+﻿[v-cloak] {
+    display: none;
+}
+
+/*#chart-container i.fa {
+    display: none !important;
+}*/
+
+#chart-container .material-icons {
+    vertical-align: middle;
+}
+
+#chart-container .empty > .lines {
+    display: none;
+}
+
+#chart-container .node {
+    cursor: pointer;
+    position: relative;
+    overflow: visible;
+}
+
+    #chart-container .node .title {
+        font-size: 11px !important;
+        line-height: 13px !important;
+        background: #006994;
+        font-weight: bold;
+        width: 100%;
+        transform: rotate(-90deg) rotateY(180deg);
+        transform-origin: left top;
+        position: absolute;
+    }
+
+    #chart-container .node .content {
+        width: auto;
+        overflow: visible;
+        transform: rotate(-90deg) rotateY(180deg);
+        transform-origin: left top;
+        margin-left: 20px;
+    }
+
+    #chart-container .node:hover .content {
+        overflow: visible;
+    }
+
+    #chart-container .node .content > a {
+        display: inline-block;
+        background-color: #fff;
+        width: auto;
+    }
+
+    #chart-container .node .content .users {
+        display: none;
+        position: absolute;
+        z-index: 1;
+        background: #fff;
+        border: 1px solid #ccc;
+        border-radius: 5px;
+        top: 20px;
+        left: 0;
+    }
+
+    #chart-container .node:hover .content .users {
+        display: block;
+    }
+
+    #chart-container .node .content .users .node-content {
+        display: block;
+        font-size: 10px;
+        min-width: 100px;
+        height: 50px;
+        line-height: 50px;
+        background-repeat: no-repeat;
+        background-size: 50px 50px;
+        padding-left: 55px;
+        padding-right: 5px;
+    }
+
+#user-photos-div {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+}
+
+    #user-photos-div a {
+        display: inline-flex;
+        border: 1px solid #ccc;
+        border-radius: 5px;
+        background: #fff;
+        position: relative;
+    }
+
+        #user-photos-div a img {
+            margin: 5px;
+            margin-bottom: 60px;
+            transition: all 1s;
+            min-width: 50px;
+            min-height: 50px;
+        }
+
+            #user-photos-div a img:hover {
+                transform: scale(1.1)
+            }
+
+        #user-photos-div a span {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            text-align: center;
+        }
+
+.slds-modal__container {
+    padding-bottom: 1vh;
+}
+
+.slds-modal__footer:empty {
+    display: none;
+}

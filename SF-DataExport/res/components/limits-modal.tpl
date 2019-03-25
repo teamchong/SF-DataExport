@@ -1,4 +1,4 @@
-﻿<v-modal @close="dispatch('GetLimits',false)" :modalStyle="{'min-width':'95vw',width:'95vw','max-width':'95vw'}">
+﻿<v-modal @close="dispatch('showLimitsModal',false)" :modalStyle="{'min-width':'95vw',width:'95vw','max-width':'95vw'}">
     <template #header>
 		<ul class="slds-tabs_default__nav">
 			<li :class="['slds-tabs_default__item',tab!=='logging'?'slds-is-active':'']" title="Org Limits">
@@ -31,7 +31,7 @@
 				
 				<hr />
 				<div class="slds-form-element">
-					<button class="slds-button slds-button_success" @click="dispatch('GetLimits', {instanceUrl:currentInstanceUrl})">
+					<button class="slds-button slds-button_success" @click="dispatch('GetLimits',{instanceUrl:currentInstanceUrl})">
 						Refresh
 					</button>
 				</div>
@@ -41,11 +41,11 @@
 					<div class="slds-grid slds-grid_align-spread slds-p-bottom_x-small" id="progress-bar-label-id-1">
 						<span>{{value.Name}} ( {{value.Remaining}} of {{value.Max}} left)</span>
 						<span>
-							<strong>{{(value.Max-value.Remaining|percent(value.Max))|round(2)}}%</strong>
+							<strong>{{(value.Max-value.Remaining)|percent(value.Max)|round(2)}}%</strong>
 						</span>
 					</div>
 					<div class="slds-progress-bar slds-progress-bar_circular">
-						<span class="slds-progress-bar__value" :style="{width:$options.filters.percent(value.Max-value.Remaining,value.Max)+'%',background:percent(value.Max-value.Remaining,value.Max)>90?'red':percent(value.Max-value.Remaining,value.Max)>70?'orange':''}"></span>
+						<span class="slds-progress-bar__value" :style="{width:$options.filters.percent(value.Max-value.Remaining,value.Max)+'%',background:$options.filters.percent(value.Max-value.Remaining,value.Max)>90?'red':$options.filters.percent(value.Max-value.Remaining,value.Max)>70?'orange':''}"></span>
 					</div>
 					<p>&nbsp;</p>
 				</div>

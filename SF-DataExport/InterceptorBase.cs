@@ -1,11 +1,9 @@
 ﻿using PuppeteerSharp;
 using System;
-using System.Collections.Generic;
-using System.Text;
-using System.Threading.Tasks;
 using System.Reactive;
-using System.Reactive.Concurrency;
 using System.Reactive.Linq;
+using System.Reactive.Threading.Tasks;
+using System.Threading.Tasks;
 
 namespace SF_DataExport
 {
@@ -24,5 +22,20 @@ namespace SF_DataExport
         public virtual Task ErrorAsync(Page appPage, string errorMessage) => null;
         
         public virtual Task PageErrorAsync(Page appPage, string errorMessage) => null;
+        
+
+        public Task<Unit> InterceptAsync(Page appPage, Request request, Func<Request, Task> funcAsync)
+        {
+            return Observable.FromAsync(() => funcAsync(request))
+            .Catch((Exception ex) => Observable.FromAsync(async () =>
+            {
+#if DEBUG
+                Console.WriteLine(ex.ToString());
+#endif
+                await request.AbortAsync();
+            }))
+            .LastOrDefaultAsync()
+            .ToTask();
+        }
     }
 }

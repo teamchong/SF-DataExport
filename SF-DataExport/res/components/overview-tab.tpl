@@ -35,7 +35,7 @@
 								<span>User Profile Pictures</span>
 							</button>
 							<button class="slds-button slds-button_icon slds-button_icon-border-filled" title="Org Limits" 
-							style="white-space:nowrap;width:auto;padding:0.5em;" @click="dispatch('GetLimits',currentInstanceUrl)">
+							style="white-space:nowrap;width:auto;padding:0.5em;" @click="dispatch('GetLimits',{instanceUrl:currentInstanceUrl})">
 								<svg class="slds-button__icon" style="font-size:1.2em">
 									<use xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="/assets/icons/utility-sprite/svg/symbols.svg#resource_capacity" />
 								</svg>
